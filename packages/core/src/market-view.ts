@@ -10,6 +10,13 @@ export interface Bar {
   volume: number;
 }
 
+export interface Post {
+  day: string; // YYYY-MM-DD
+  ticker: string;
+  text: string;
+  sentiment: "bullish" | "bearish" | null;
+}
+
 /**
  * Everything an agent is allowed to know on one simulated day.
  * Every query goes through asOf(), so the database itself refuses
@@ -32,6 +39,21 @@ export class MarketView {
         [ticker, lookbackDays],
       );
       return rows.map(toBar).reverse();
+    });
+  }
+
+  /** Posts about one ticker from the last `days` calendar days, newest first, up to and including simDate. */
+  async getPosts(ticker: string, days = 3, limit = 30): Promise<Post[]> {
+    if (!this.tickers.includes(ticker)) throw new Error(`Unknown ticker: ${ticker}`);
+    return asOf(this.simDate, async (c) => {
+      const { rows } = await c.query(
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day, ticker, text, sentiment
+           FROM posts
+          WHERE ticker = $1 AND day > current_setting('app.sim_date')::date - $2::int
+          ORDER BY day DESC, id DESC LIMIT $3`,
+        [ticker, days, limit],
+      );
+      return rows as Post[];
     });
   }
 

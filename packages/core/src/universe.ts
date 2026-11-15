@@ -1,14 +1,21 @@
-/** The demo universe: six large stocks plus the S&P 500 ETF as a benchmark. */
-export const DEFAULT_TICKERS = ["AAPL", "MSFT", "AMZN", "TSLA", "JPM", "XOM", "SPY"];
+/** Stocks the agent can trade. Both have StockTwits posts for 2020. */
+export const TRADE_TICKERS = ["AAPL", "NVDA"];
+
+/** Market benchmark. The agent can see its prices but it has no posts. */
+export const BENCHMARK = "SPY";
+
+/** Everything the agent can look at. */
+export const DEFAULT_TICKERS = [...TRADE_TICKERS, BENCHMARK];
+
+/** Main test: 60 trading days around the COVID crash (bottom on 2020-03-23). */
+export const DEMO_WINDOW = { start: "2020-01-24", end: "2020-04-20" };
 
 /**
- * Data range stored in the database. It starts early so strategies have
- * history to look back on, and ends late so trades near the end of a test
- * can still be graded on the days that follow.
+ * Control test: 60 trading days after the AI model's training data ends,
+ * so it cannot remember what happened. Prices only (posts end in 2020).
+ * If the Leakage Gap is large in 2020 but near zero here, the gap is memory, not noise.
  */
-export const DATA_START = "2019-09-01";
-export const DATA_END = "2020-07-31";
+export const CONTROL_WINDOW = { start: "2026-07-01", end: "2026-09-24" };
 
-/** Default test window: the COVID crash and rebound. */
-export const DEFAULT_TEST_START = "2020-01-02";
-export const DEFAULT_TEST_END = "2020-04-30";
+/** Trading days after a trade used to grade it. */
+export const GRADE_HORIZON_DAYS = 5;

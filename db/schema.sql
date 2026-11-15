@@ -11,6 +11,18 @@ CREATE TABLE IF NOT EXISTS prices (
   volume  bigint  NOT NULL,
   PRIMARY KEY (ticker, day)
 );
+-- Unadjusted close, for display only. open/high/low/close are split- and dividend-adjusted.
+ALTER TABLE prices ADD COLUMN IF NOT EXISTS raw_close double precision;
+
+-- Social posts (StockTwits). Dated by day; the agent sees posts up to and including the simulated day.
+CREATE TABLE IF NOT EXISTS posts (
+  id        bigint PRIMARY KEY,
+  day       date   NOT NULL,
+  ticker    text   NOT NULL,
+  text      text   NOT NULL,
+  sentiment text
+);
+CREATE INDEX IF NOT EXISTS posts_ticker_day ON posts (ticker, day);
 
 -- On TigerData, turn prices into a hypertable. Skipped on plain Postgres.
 DO $$
@@ -34,11 +46,16 @@ END $$;
 
 GRANT agent_reader TO CURRENT_USER;
 GRANT USAGE ON SCHEMA public TO agent_reader;
-GRANT SELECT ON prices TO agent_reader;
+GRANT SELECT ON prices, posts TO agent_reader;
 
 ALTER TABLE prices ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS no_future ON prices;
 CREATE POLICY no_future ON prices FOR SELECT TO agent_reader
+  USING (day <= NULLIF(current_setting('app.sim_date', true), '')::date);
+
+ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS no_future ON posts;
+CREATE POLICY no_future ON posts FOR SELECT TO agent_reader
   USING (day <= NULLIF(current_setting('app.sim_date', true), '')::date);
 -- The table owner (the app itself, for loading data and grading after a run)
 -- is not subject to these policies, so it still sees everything.

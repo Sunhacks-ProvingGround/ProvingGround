@@ -6,7 +6,6 @@
   "main": "src/index.ts",
   "scripts": {
     "db:migrate": "tsx scripts/migrate.ts",
-    "db:fetch": "tsx scripts/fetch-prices.ts",
     "db:load": "tsx scripts/load-prices.ts",
     "db:check": "tsx scripts/check-no-future.ts",
     "typecheck": "tsc -p ."
