@@ -10,7 +10,7 @@ export function db(): pg.Pool {
     const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
     pool = new pg.Pool({
       connectionString: url,
-      ssl: local ? undefined : { rejectUnauthorized: false },
+      ssl: local ? undefined : true, // encrypted, with certificate checks
       max: 10,
     });
   }
