@@ -1,0 +1,24 @@
+{
+  "name": "@pg/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:fetch": "tsx scripts/fetch-prices.ts",
+    "db:load": "tsx scripts/load-prices.ts",
+    "db:check": "tsx scripts/check-no-future.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "dotenv": "^18.0.10",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "provingground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:migrate": "pnpm --filter @pg/core db:migrate",
+    "db:fetch": "pnpm --filter @pg/core db:fetch",
+    "db:load": "pnpm --filter @pg/core db:load",
+    "db:check": "pnpm --filter @pg/core db:check",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

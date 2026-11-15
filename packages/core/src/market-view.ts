@@ -1,0 +1,62 @@
+import { asOf } from "./db.js";
+
+export interface Bar {
+  ticker: string;
+  day: string; // YYYY-MM-DD
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+/**
+ * Everything an agent is allowed to know on one simulated day.
+ * Every query goes through asOf(), so the database itself refuses
+ * to return anything after `simDate`.
+ */
+export class MarketView {
+  constructor(
+    readonly simDate: string,
+    readonly tickers: string[],
+  ) {}
+
+  /** The last `lookbackDays` trading days for one ticker, oldest first, ending on simDate. */
+  async getPrices(ticker: string, lookbackDays = 30): Promise<Bar[]> {
+    if (!this.tickers.includes(ticker)) throw new Error(`Unknown ticker: ${ticker}`);
+    return asOf(this.simDate, async (c) => {
+      const { rows } = await c.query(
+        `SELECT ticker, to_char(day, 'YYYY-MM-DD') AS day, open, high, low, close, volume
+           FROM prices WHERE ticker = $1
+          ORDER BY day DESC LIMIT $2`,
+        [ticker, lookbackDays],
+      );
+      return rows.map(toBar).reverse();
+    });
+  }
+
+  /** Latest close for every ticker in the universe, as of simDate. */
+  async latestCloses(): Promise<Record<string, number>> {
+    return asOf(this.simDate, async (c) => {
+      const { rows } = await c.query(
+        `SELECT DISTINCT ON (ticker) ticker, close
+           FROM prices WHERE ticker = ANY($1)
+          ORDER BY ticker, day DESC`,
+        [this.tickers],
+      );
+      return Object.fromEntries(rows.map((r) => [r.ticker, Number(r.close)]));
+    });
+  }
+}
+
+function toBar(r: any): Bar {
+  return {
+    ticker: r.ticker,
+    day: r.day,
+    open: Number(r.open),
+    high: Number(r.high),
+    low: Number(r.low),
+    close: Number(r.close),
+    volume: Number(r.volume),
+  };
+}
