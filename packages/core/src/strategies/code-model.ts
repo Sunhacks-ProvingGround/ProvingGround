@@ -17,6 +17,8 @@ export interface CodeModelOptions {
    */
   preloaded?: Bars;
   params?: Record<string, unknown>;
+  /** Called with each day's target weights (null = hold), for evaluation. */
+  onTargets?: (day: string, targets: Record<string, number> | null) => void;
 }
 
 const pct = (w: number) => `${Math.round(w * 100)}%`;
@@ -37,7 +39,7 @@ export function codeModel(opts: CodeModelOptions): Strategy {
       }
       const portfolio = { cash: ctx.portfolio.cash, equity: ctx.portfolio.equity, weights: ctx.portfolio.weights, day: ctx.day };
       const out = await opts.sandbox.call<any>("decide", [opts.state, history, portfolio], 2000);
-      if (out == null) return null; // hold
+      if (out == null) { opts.onTargets?.(ctx.day, null); return null; } // hold
       const raw = typeof out === "object" && out.weights && typeof out.weights === "object" ? out.weights : out;
       if (typeof raw !== "object") throw new Error("decide() must return an object of weights, e.g. { AAPL: 0.5 }");
       const targets: Record<string, number> = {};
@@ -48,6 +50,7 @@ export function codeModel(opts: CodeModelOptions): Strategy {
       const reason = typeof out.reason === "string" && out.reason.trim()
         ? out.reason.slice(0, 300)
         : `Model target: ${opts.tickers.map((t) => `${t} ${pct(targets[t])}`).join(", ")}`;
+      opts.onTargets?.(ctx.day, targets);
       return { targets, reason };
     },
   };

@@ -180,3 +180,24 @@ textarea.code.prose { min-height: 180px; font-family: var(--font-body); font-siz
 .nowrap { white-space: nowrap; }
 .missed-grid ul { margin: 6px 0 0; padding-left: 18px; }
 .missed-grid li { margin-bottom: 4px; }
+
+/* Model evaluation */
+.verdict { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--line); }
+.verdict.generalises { background: var(--good-bg); border-color: transparent; }
+.verdict.some-overfit { background: var(--warn-bg); border-color: transparent; }
+.verdict.overfit, .verdict.no-edge { background: var(--bad-bg); border-color: transparent; }
+.verdict b { font-size: 16px; }
+.verdict.generalises b { color: var(--good-ink); }
+.verdict.some-overfit b { color: var(--warn-ink); }
+.verdict.overfit b, .verdict.no-edge b { color: var(--bad-ink); }
+.cm-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+.cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px; font-size: 13px; align-items: stretch; }
+.cm .h { color: var(--ink-3); font-size: 12px; text-align: center; align-self: end; padding-bottom: 2px; }
+.cm .r { color: var(--ink-3); font-size: 12px; writing-mode: horizontal-tb; align-self: center; padding-right: 6px; text-align: right; }
+.cm .c { border-radius: 6px; padding: 10px; text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.cm .c small { display: block; font-family: var(--font-body); color: var(--ink-2); font-size: 11px; }
+.cm .c.right { background: var(--good-bg); color: var(--good-ink); }
+.cm .c.wrong { background: var(--bad-bg); color: var(--bad-ink); }
+.eval-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; }
+td.better { color: var(--good-ink); font-weight: 600; }
+td.worse { color: var(--bad-ink); font-weight: 600; }

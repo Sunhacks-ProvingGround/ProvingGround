@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { modelsApi, type Model, type ModelInput, type Run, type Templates, type TickerInfo } from "../api";
 import { EquityChart } from "../charts";
 import { LiveProgress, useJobEvents } from "../live";
+import { ModelEvaluation } from "../evaluation";
 import { longDate, navigate, pct, usd } from "../format";
 
 const DEFAULT: ModelInput = {
@@ -259,7 +260,7 @@ function TrainingResults({ model }: { model: Model }) {
     <div style={{ display: "grid", gap: 16 }}>
       <p className="small muted" style={{ margin: 0 }}>
         {model.kind === "code"
-          ? `train() saw ${m.trainDays} trading days. decide() was then scored day by day on the training period from ${longDate(m.scoredFrom!)}, with fees.`
+          ? `Training period: ${m.trainDays} trading days. decide() was scored day by day from ${longDate(m.scoredFrom!)}, with fees; the summary below covers the whole period.`
           : `Practice run from ${longDate(m.practiceFrom!)} to ${longDate(model.trainEnd)}, graded like a test.`}
         {" "}These are in-sample numbers: a test on later dates is the real exam.
       </p>
@@ -277,7 +278,9 @@ function TrainingResults({ model }: { model: Model }) {
           {Object.entries(m.model).map(([k, v]) => <span className="tag" key={k}>{k} {Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(0)}</span>)}
         </div>
       )}
-      {curve.length > 1 && (
+      {m.evaluation ? (
+        <ModelEvaluation ev={m.evaluation} curve={curve} name={model.name} />
+      ) : curve.length > 1 && (
         <EquityChart
           baseline={curve[0].model}
           series={[

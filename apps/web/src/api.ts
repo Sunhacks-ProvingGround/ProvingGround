@@ -140,6 +140,21 @@ export interface ModelMetrics {
   exposure: number; trades: number; hitRate: number | null; days: number;
   model?: Record<string, number>; scoredFrom?: string; practiceFrom?: string; trainDays?: number; errors?: number;
   curve?: { day: string; model: number; buyHold: number | null }[];
+  evaluation?: Evaluation;
+}
+export interface ClassMetrics {
+  n: number; tp: number; fp: number; fn: number; tn: number;
+  accuracy: number; balancedAccuracy: number; precision: number | null; recall: number | null; f1: number | null;
+  upRate: number; baselineAccuracy: number; ic: number | null; avgFwdHeld: number | null; avgFwdNotHeld: number | null;
+  totalReturn: number; buyHoldReturn: number; sharpe: number;
+}
+export interface Evaluation {
+  horizon: number; holdThreshold: number; validationShare: number; validationStart: string | null;
+  fitDays: number; validationDays: number;
+  fit: ClassMetrics; validation: ClassMetrics | null;
+  rolling: { day: string; accuracy: number }[];
+  buckets: { fit: { label: string; n: number; avgFwd: number | null }[]; validation: { label: string; n: number; avgFwd: number | null }[] | null };
+  verdict: { level: "generalises" | "some-overfit" | "overfit" | "no-edge"; title: string; detail: string } | null;
 }
 export interface Model {
   id: string; name: string; kind: "code" | "prompt"; code: string | null; prompt: string | null; tickers: string[];

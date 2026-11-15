@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Agent } from "@mastra/core/agent";
 import { z } from "zod";
 import { db } from "./db.js";
-import { loadBars, tickerCoverage } from "./dataset.js";
+import { loadBars, sliceBars, tickerCoverage, type Bars } from "./dataset.js";
+import { classify, rollingAccuracy, signalBuckets, verdict, sharpeOf, EVAL_HORIZON, HOLD_THRESHOLD, VALIDATION_SHARE, MIN_VALIDATION_DAYS, type Sample } from "./evaluation.js";
 import { ModelSandbox } from "./sandbox.js";
 import { codeModel } from "./strategies/code-model.js";
 import { llmAgent, type LlmDecisionLog } from "./strategies/llm-agent.js";
@@ -12,6 +13,7 @@ import { performance, downsample } from "./metrics.js";
 import { canonicalJson, sha256 } from "./runs.js";
 import { gemini, paceGeminiCall } from "./llm.js";
 import { TICKER_INFO } from "./universe.js";
+import type { DayRecord } from "./types.js";
 
 export type ModelKind = "code" | "prompt";
 
@@ -48,8 +50,8 @@ export interface ModelInput {
 
 /** Trading days a prompt model practises on (the end of its training period). Each day is one model call. */
 export const PRACTICE_DAYS = 30;
-/** Code models need at least this many trading days to train on. */
-export const MIN_TRAIN_DAYS = 60;
+/** Code models need at least this many trading days (some are held out for validation). */
+export const MIN_TRAIN_DAYS = 120;
 
 const COLS = `id, name, kind, code, prompt, tickers, to_char(train_start,'YYYY-MM-DD') AS train_start,
   to_char(train_end,'YYYY-MM-DD') AS train_end, status, state, lessons, metrics, logs, error, version_hash,
@@ -149,30 +151,39 @@ export async function trainModel(id: string, emit: (e: TrainEvent) => void = () 
       emit({ type: "train-status", message: "Loading your code into the sandbox" });
       sandbox = await ModelSandbox.load(model.code ?? "");
       const data = await loadBars(model.tickers, model.trainStart, model.trainEnd);
-      if (data.dates.length < MIN_TRAIN_DAYS) {
-        throw new Error(`Only ${data.dates.length} trading days in the training period; pick at least ${MIN_TRAIN_DAYS}.`);
+      const n = data.dates.length;
+      if (n < MIN_TRAIN_DAYS) {
+        throw new Error(`Only ${n} trading days in the training period; pick at least ${MIN_TRAIN_DAYS} so some can be held out for validation.`);
       }
-      emit({ type: "train-status", message: `Running train() on ${data.dates.length} trading days (${data.dates[0]} to ${data.dates.at(-1)})` });
-      const out = await sandbox.call<any>("train", [data], 60_000);
+      // Hold out the last part of the training period: train() never sees it.
+      const valDays = Math.max(MIN_VALIDATION_DAYS, Math.round(n * VALIDATION_SHARE));
+      const split = n - valDays;
+      const validationStart = data.dates[split];
+      const fitData = sliceBars(data, 0, split - 1);
+      emit({ type: "train-status", message: `Running train() on the first ${split} trading days (${data.dates[0]} to ${data.dates[split - 1]}); the last ${valDays} are held out for validation` });
+      const out = await sandbox.call<any>("train", [fitData], 60_000);
       const state = out && typeof out === "object" && "state" in out ? out.state : out;
       const modelMetrics = out && typeof out === "object" && out.metrics && typeof out.metrics === "object"
         ? Object.fromEntries(Object.entries(out.metrics).filter(([, v]) => typeof v === "number" && Number.isFinite(v)).slice(0, 12))
         : {};
 
-      // Score the trained model on the training period, day by day, after a warm-up for history.
-      const warmup = Math.min(60, Math.floor(data.dates.length / 3));
+      // Score decide() day by day over the whole period (after a warm-up for history).
+      // On each day it sees only the past, so held-out days stay unseen until they happen.
+      const warmup = Math.min(60, Math.floor(split / 3));
       const from = data.dates[warmup];
-      emit({ type: "train-status", message: `Scoring decide() on the training period from ${from}` });
+      emit({ type: "train-status", message: `Scoring decide() from ${from}: training days, then the held-out days from ${validationStart}` });
+      const targetsByDay = new Map<string, Record<string, number> | null>();
       const bt = await runBacktest({
-        strategy: codeModel({ sandbox, state, tickers: model.tickers, preloaded: data }),
+        strategy: codeModel({ sandbox, state, tickers: model.tickers, preloaded: data, onTargets: (d, t) => targetsByDay.set(d, t) }),
         tradeable: model.tickers, start: from, end: model.trainEnd,
         onDay: (d, _t, index, total) => { if (index % 10 === 0 || index === total - 1) emit({ type: "train-progress", index, total, day: d.day, equity: d.equity }); },
       });
       const graded = await gradeTrades(bt.trades.map((t, i) => ({ id: i + 1, ...t })));
       const perf = await performance(bt.days, model.tickers, bt.trades.length, countGrades(graded));
+      const evaluation = evaluate(buildSamples(targetsByDay, data, model.tickers), bt.days, perf.buyHold, validationStart, split, valDays, true);
       result = {
         state, lessons: null, logs: sandbox.logs.slice(-100),
-        metrics: { ...stripCurve(perf), model: modelMetrics, scoredFrom: from, trainDays: data.dates.length, curve: curve(bt.days, perf.buyHold) },
+        metrics: { ...stripCurve(perf), model: modelMetrics, scoredFrom: from, trainDays: n, curve: curve(bt.days, perf.buyHold), evaluation },
         versionHash: sha256(`code\n${model.code}\n${canonicalJson(state)}`),
       };
     } else {
@@ -196,9 +207,12 @@ export async function trainModel(id: string, emit: (e: TrainEvent) => void = () 
       emit({ type: "train-status", message: "Turning the practice run's mistakes into lessons" });
       const lessons = await writeLessons(model, graded, bt.days.at(-1)!.equity / bt.days[0].equity - 1);
       const perf = await performance(bt.days, model.tickers, bt.trades.length, countGrades(graded));
+      const bars = await loadBars(model.tickers, practice[0], model.trainEnd);
+      const targetsByDay = new Map<string, Record<string, number> | null>(agent.decisions.map((d) => [d.day, d.error ? null : d.targets]));
+      const evaluation = evaluate(buildSamples(targetsByDay, bars, model.tickers), bt.days, perf.buyHold, null, practice.length, 0, false);
       result = {
         state: null, lessons, logs: [],
-        metrics: { ...stripCurve(perf), practiceFrom: practice[0], trainDays: days.length, curve: curve(bt.days, perf.buyHold), errors: agent.decisions.filter((d) => d.error).length },
+        metrics: { ...stripCurve(perf), practiceFrom: practice[0], trainDays: days.length, curve: curve(bt.days, perf.buyHold), errors: agent.decisions.filter((d) => d.error).length, evaluation },
         versionHash: sha256(`prompt\n${model.prompt}\n${lessons}`),
       };
     }
@@ -259,4 +273,60 @@ async function writeLessons(model: Model, graded: GradedTrade[], practiceReturn:
     }
   }
   return fallback;
+}
+
+/**
+ * Turns each day's decision into one prediction per stock: the weight it
+ * chose, and what the price did over the next EVAL_HORIZON trading days.
+ * A "hold" (null) keeps the previous targets. Only days whose outcome falls
+ * inside the training period are used.
+ */
+function buildSamples(targetsByDay: Map<string, Record<string, number> | null>, bars: Bars, tickers: string[]): Sample[] {
+  const out: Sample[] = [];
+  let current: Record<string, number> = Object.fromEntries(tickers.map((t) => [t, 0]));
+  for (let i = 0; i < bars.dates.length; i++) {
+    const day = bars.dates[i];
+    if (!targetsByDay.has(day)) continue;
+    const t = targetsByDay.get(day);
+    if (t) {
+      const total = tickers.reduce((s, k) => s + Math.max(0, t[k] ?? 0), 0);
+      current = Object.fromEntries(tickers.map((k) => [k, Math.max(0, t[k] ?? 0) / Math.max(1, total)]));
+    }
+    if (i + EVAL_HORIZON >= bars.dates.length) continue;
+    for (const k of tickers) {
+      out.push({ day, ticker: k, weight: current[k], fwd: bars.close[k][i + EVAL_HORIZON] / bars.close[k][i] - 1 });
+    }
+  }
+  return out;
+}
+
+function segmentReturns(days: DayRecord[], bh: { day: string; value: number }[], inSeg: (d: string) => boolean) {
+  const idx = days.map((d, i) => (inSeg(d.day) ? i : -1)).filter((i) => i >= 0);
+  if (!idx.length) return { totalReturn: 0, buyHoldReturn: 0, sharpe: 0 };
+  // Measure from the close before the segment starts, so returns chain.
+  const first = Math.max(0, idx[0] - 1), last = idx.at(-1)!;
+  const eq = days.slice(first, last + 1).map((d) => d.equity);
+  const bhv = bh.slice(first, last + 1).map((p) => p.value);
+  return { totalReturn: eq.at(-1)! / eq[0] - 1, buyHoldReturn: bhv.at(-1)! / bhv[0] - 1, sharpe: sharpeOf(eq) };
+}
+
+function evaluate(samples: Sample[], days: DayRecord[], bh: { day: string; value: number }[], validationStart: string | null, fitDays: number, validationDays: number, canOverfit: boolean) {
+  const isVal = (d: string) => validationStart != null && d >= validationStart;
+  const fitS = samples.filter((s) => !isVal(s.day));
+  const valS = samples.filter((s) => isVal(s.day));
+  const fit = { ...classify(fitS), ...segmentReturns(days, bh, (d) => !isVal(d)) };
+  const validation = validationStart ? { ...classify(valS), ...segmentReturns(days, bh, isVal) } : null;
+  return {
+    horizon: EVAL_HORIZON,
+    holdThreshold: HOLD_THRESHOLD,
+    validationShare: VALIDATION_SHARE,
+    validationStart,
+    fitDays,
+    validationDays,
+    fit,
+    validation,
+    rolling: downsample(rollingAccuracy(samples, canOverfit ? 40 : 10), 300),
+    buckets: { fit: signalBuckets(fitS), validation: validation ? signalBuckets(valS) : null },
+    verdict: canOverfit && validation && valS.length && fitS.length ? verdict(fit, validation) : null,
+  };
 }

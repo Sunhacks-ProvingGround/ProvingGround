@@ -96,6 +96,16 @@ Code models run `train()`, then `decide()` is scored day by day on the training 
 trades, exposure). Prompt models do a graded practice run on the last 30 trading days and
 Gemini turns the mistakes into lessons the model carries into its tests.
 
+**Evaluation** (shown after training, before any test): code models' `train()` sees only the
+first 80% of the training period; the last 20% (at least 40 trading days) is held out. Each
+daily decision is read as a prediction per stock (held = "will rise over the next 5 trading
+days"), giving a confusion matrix, accuracy, balanced accuracy, precision, recall, F1 and the
+information coefficient (correlation of position size with the next 5-day return) for the
+training days and the held-out days, plus rolling balanced accuracy, return by position size,
+and a verdict: generalises, some overfitting, overfit, or didn't learn a signal. The verdict
+uses balanced accuracy (50% = coin flip in any market) and IC, not Sharpe, which a rising
+market inflates.
+
 **Testing** must start after training ends. The test is registered in the run log with the
 model's version hash (code or prompt plus what training produced), every trade is graded and
 reviewed, and **What the model missed** lists the biggest rallies it sat out, the drops it held

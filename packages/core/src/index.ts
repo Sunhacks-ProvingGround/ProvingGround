@@ -21,3 +21,4 @@ export * from "./templates.js";
 export * from "./models.js";
 export * from "./strategies/code-model.js";
 export * from "./missed.js";
+export * from "./evaluation.js";

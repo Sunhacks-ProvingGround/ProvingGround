@@ -3,7 +3,10 @@
 export const MODEL_FORMAT_DOC = `Write two functions in plain JavaScript.
 
 function train(data)
-  Called once with the training period only. Return what your model learned:
+  Called once with the first 80% of the training period. The last 20% (at least
+  40 trading days) is held out: after training, decide() is scored on both parts
+  so you can see accuracy, F1 and whether the model overfit.
+  Return what your model learned:
     return { state: {...}, metrics: { name: number, ... } }   // or just the state
   The state must be plain JSON. Metrics are optional and shown after training.
 

@@ -21,7 +21,16 @@ const tickMoney = (v: number) =>
   Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(Number.isInteger(v / 1000) ? 0 : 1)}k` : `$${v}`;
 
 /** Several value-over-time lines on one axis, with a shared crosshair tooltip and a legend. */
-export function EquityChart({ series, height = 320, baseline }: { series: LineSeries[]; height?: number; baseline?: number }) {
+export function EquityChart({ series, height = 320, baseline, markers = [], percent = false, domain }: {
+  series: LineSeries[]; height?: number; baseline?: number;
+  /** Vertical lines, e.g. where held-out validation starts. */
+  markers?: { day: string; label: string }[];
+  /** Values are fractions shown as percentages (instead of dollars). */
+  percent?: boolean;
+  domain?: [number, number];
+}) {
+  const fmt = percent ? (v: number) => `${Math.round(v * 100)}%` : tickMoney;
+  const fmtTip = percent ? (v: number) => `${(v * 100).toFixed(1)}%` : usd;
   const days = [...new Set(series.flatMap((s) => s.points.map((p) => p.day)))].sort();
   const data = days.map((day) => {
     const row: Record<string, number | string> = { day };
@@ -38,8 +47,16 @@ export function EquityChart({ series, height = 320, baseline }: { series: LineSe
           <LineChart data={data} margin={{ top: 8, right: 28, bottom: 4, left: 4 }}>
             <CartesianGrid vertical={false} strokeDasharray="0" />
             <XAxis dataKey="day" tickFormatter={tickFor(days)} minTickGap={40} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
-            <YAxis tickFormatter={tickMoney} width={52} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
+            <YAxis tickFormatter={fmt} width={52} tickLine={false} axisLine={false} domain={domain ?? ["auto", "auto"]} />
             {baseline != null && <ReferenceLine y={baseline} stroke="var(--ink-3)" strokeDasharray="2 3" />}
+            {markers.map((m) => {
+              // Curves may be thinned out, so snap to the first plotted day on or after the marker.
+              const x = days.find((d) => d >= m.day);
+              return x ? (
+                <ReferenceLine key={m.day} x={x} stroke="var(--ink-2)" strokeDasharray="4 3"
+                  label={{ value: m.label, position: "insideTopRight", fill: "var(--ink-2)", fontSize: 12 }} />
+              ) : null;
+            })}
             <Tooltip
               cursor={{ stroke: "var(--ink-3)", strokeWidth: 1 }}
               content={({ active, label, payload }) =>
@@ -51,7 +68,7 @@ export function EquityChart({ series, height = 320, baseline }: { series: LineSe
                       return v == null ? null : (
                         <div className="r" key={s.key}>
                           <span><i style={{ display: "inline-block", width: 10, height: 3, background: s.color, marginRight: 6, verticalAlign: "middle" }} />{s.label}</span>
-                          <b>{usd(v)}</b>
+                          <b>{fmtTip(v)}</b>
                         </div>
                       );
                     })}
