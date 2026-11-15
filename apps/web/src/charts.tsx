@@ -1,5 +1,6 @@
+import { useId } from "react";
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Scatter, ReferenceLine,
+  ResponsiveContainer, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Scatter, ReferenceLine,
 } from "recharts";
 import type { Trade } from "./api";
 import { shortDate, usd, pct } from "./format";
@@ -30,6 +31,11 @@ export function EquityChart({ series, height = 320, baseline, markers = [], perc
   domain?: [number, number];
 }) {
   const fmt = percent ? (v: number) => `${Math.round(v * 100)}%` : tickMoney;
+  // Base-style soft gradient under the main line, on charts with one or two lines only.
+  const gid = `g${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  const fillSeries = series.length <= 2 ? series.find((x) => !x.dashed) : undefined;
+  const fillKey = fillSeries?.key;
+  const fillColor = fillSeries?.color ?? "transparent";
   const fmtTip = percent ? (v: number) => `${(v * 100).toFixed(1)}%` : usd;
   const days = [...new Set(series.flatMap((s) => s.points.map((p) => p.day)))].sort();
   const data = days.map((day) => {
@@ -44,7 +50,14 @@ export function EquityChart({ series, height = 320, baseline, markers = [], perc
     <div>
       <div style={{ width: "100%", height }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 8, right: 28, bottom: 4, left: 4 }}>
+          <ComposedChart data={data} margin={{ top: 8, right: 28, bottom: 4, left: 4 }}>
+            <defs>
+              <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" style={{ stopColor: fillColor, stopOpacity: 0.22 }} />
+                <stop offset="100%" style={{ stopColor: fillColor, stopOpacity: 0 }} />
+              </linearGradient>
+            </defs>
+            {fillKey && <Area type="linear" dataKey={fillKey} stroke="none" fill={`url(#${gid})`} isAnimationActive={false} connectNulls activeDot={false} tooltipType="none" />}
             <CartesianGrid vertical={false} strokeDasharray="0" />
             <XAxis dataKey="day" tickFormatter={tickFor(days)} minTickGap={40} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
             <YAxis tickFormatter={fmt} width={52} tickLine={false} axisLine={false} domain={domain ?? ["auto", "auto"]} />
@@ -90,7 +103,7 @@ export function EquityChart({ series, height = 320, baseline, markers = [], perc
                 connectNulls
               />
             ))}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
       {series.length > 1 && (
@@ -122,6 +135,7 @@ function TradeMark(props: any) {
 export function PriceWithTrades({ ticker, prices, trades, height = 240 }: {
   ticker: string; prices: { day: string; close: number }[]; trades: Trade[]; height?: number;
 }) {
+  const pid = `p${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   const mine = trades.filter((t) => t.ticker === ticker);
   const data = prices.map((p) => {
     const t = mine.find((x) => x.filledOn === p.day);
@@ -160,6 +174,13 @@ export function PriceWithTrades({ ticker, prices, trades, height = 240 }: {
               );
             }}
           />
+          <defs>
+            <linearGradient id={pid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" style={{ stopColor: "var(--s1)", stopOpacity: 0.18 }} />
+              <stop offset="100%" style={{ stopColor: "var(--s1)", stopOpacity: 0 }} />
+            </linearGradient>
+          </defs>
+          <Area type="linear" dataKey="close" stroke="none" fill={`url(#${pid})`} isAnimationActive={false} connectNulls activeDot={false} tooltipType="none" />
           <Line type="linear" dataKey="close" stroke="var(--s1)" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
           <Scatter dataKey="mark" shape={<TradeMark />} isAnimationActive={false} />
         </ComposedChart>
