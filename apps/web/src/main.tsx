@@ -9,12 +9,13 @@ import { Preview } from "./pages/Preview";
 import { Models } from "./pages/Models";
 import { ModelPage } from "./pages/ModelPage";
 
-type Route = { page: "overview" | "new" | "runs" | "run" | "preview" | "models" | "model"; id?: string };
+type Route = { page: "overview" | "new" | "runs" | "run" | "preview" | "models" | "model" | "test"; id?: string };
 
 function parse(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
   if (h.startsWith("run/")) return { page: "run", id: h.slice(4) };
   if (h.startsWith("model/")) return { page: "model", id: h.slice(6) };
+  if (h.startsWith("test/")) return { page: "test", id: h.slice(5) };
   if (h === "models") return { page: "models" };
   if (h === "new" || h === "runs" || h === "preview") return { page: h };
   return { page: "overview" };
@@ -51,7 +52,7 @@ function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.page} href={n.href} aria-current={route.page === n.page || (route.page === "run" && n.page === "runs") || (route.page === "model" && n.page === "models") ? "page" : undefined}>{n.label}</a>
+              <a key={n.page} href={n.href} aria-current={route.page === n.page || (route.page === "run" && n.page === "runs") || (route.page === "model" && n.page === "models") || (route.page === "test" && n.page === "new") ? "page" : undefined}>{n.label}</a>
             ))}
           </nav>
         </div>
@@ -59,6 +60,7 @@ function App() {
       <main>
         {route.page === "overview" && <Overview windowKey={windowKey} setWindowKey={setWindowKey} />}
         {route.page === "new" && <NewRun />}
+        {route.page === "test" && route.id && <NewRun key={route.id} modelId={route.id} />}
         {route.page === "runs" && <Runs />}
         {route.page === "run" && route.id && <RunDetail id={route.id} />}
         {route.page === "preview" && <Preview />}

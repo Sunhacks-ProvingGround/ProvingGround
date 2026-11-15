@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { modelsApi, type Model, type ModelInput, type Run, type Templates, type TickerInfo } from "../api";
+import { modelsApi, type Model, type ModelInput, type Templates, type TickerInfo } from "../api";
 import { EquityChart } from "../charts";
 import { LiveProgress, useJobEvents } from "../live";
 import { ModelEvaluation } from "../evaluation";
@@ -9,34 +9,37 @@ const DEFAULT: ModelInput = {
   name: "", kind: "code", code: "", prompt: "",
   tickers: ["AAPL", "MSFT", "NVDA", "GOOGL"], trainStart: "2015-01-02", trainEnd: "2019-12-31",
 };
+const LAST_DAY = "2026-11-12";
 
-/** One calendar day after `d` (YYYY-MM-DD). */
-const nextDay = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+/** Roughly where the held-out 20% starts, by calendar time (the server splits by trading days). */
+function approxSplit(start: string, end: string) {
+  const a = Date.parse(`${start}T12:00:00Z`), b = Date.parse(`${end}T12:00:00Z`);
+  if (!(b > a)) return null;
+  return new Date(a + (b - a) * 0.8).toISOString().slice(0, 10);
+}
+
+type Tab = "setup" | "results";
+const monthYear = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
 export function ModelPage({ id }: { id: string }) {
   const isNew = id === "new";
   const [form, setForm] = useState<ModelInput>(DEFAULT);
   const [model, setModel] = useState<Model | null>(null);
-  const [tests, setTests] = useState<Run[]>([]);
   const [tickers, setTickers] = useState<TickerInfo[]>([]);
   const [tpl, setTpl] = useState<Templates | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [trainJob, setTrainJob] = useState<string | null>(null);
-  const [testJob, setTestJob] = useState<string | null>(null);
-  const [test, setTest] = useState({ start: "2020-01-02", end: "2020-12-31", mode: "normal" as "normal" | "blind" });
-
+  const [tab, setTab] = useState<Tab>("setup");
+  const [showFormat, setShowFormat] = useState(false);
   const train = useJobEvents(trainJob);
-  const tst = useJobEvents(testJob);
 
-  async function load(mid: string) {
+  async function load(mid: string, openResults = false) {
     const d = await modelsApi.get(mid);
     setModel(d.model);
-    setTests(d.tests);
     setForm({ name: d.model.name, kind: d.model.kind, code: d.model.code ?? "", prompt: d.model.prompt ?? "", tickers: d.model.tickers, trainStart: d.model.trainStart, trainEnd: d.model.trainEnd });
-    if (d.trainJobId) setTrainJob(d.trainJobId);
-    setTest((t) => (t.start <= d.model.trainEnd ? { ...t, start: nextDay(d.model.trainEnd), end: addDays(d.model.trainEnd, 365) } : t));
+    if (d.trainJobId) { setTrainJob(d.trainJobId); setTab("results"); }
+    else if (openResults && (d.model.status === "trained" || d.model.status === "failed")) setTab("results");
   }
 
   useEffect(() => {
@@ -45,19 +48,21 @@ export function ModelPage({ id }: { id: string }) {
       setTpl(t);
       if (isNew) setForm((f) => ({ ...f, code: f.code || t.code[0].code, name: f.name || t.code[0].name }));
     }, () => {});
-    if (!isNew) load(id).catch((e) => setError(e.message));
-    else { setModel(null); setTests([]); setForm(DEFAULT); }
+    if (!isNew) load(id, true).catch((e) => setError(e.message));
   }, [id]);
 
-  // Reload the model when training or a test finishes.
-  useEffect(() => { if (model && (train.status === "done" || train.status === "failed")) load(model.id).catch(() => {}); }, [train.status]);
-  useEffect(() => { if (model && (tst.status === "done" || tst.status === "failed")) load(model.id).catch(() => {}); }, [tst.status]);
+  useEffect(() => {
+    if (model && (train.status === "done" || train.status === "failed")) load(model.id).catch(() => {});
+  }, [train.status]);
 
   const dirty = useMemo(() => {
     if (!model) return true;
     return form.name !== model.name || form.kind !== model.kind || (form.code ?? "") !== (model.code ?? "") || (form.prompt ?? "") !== (model.prompt ?? "")
       || form.tickers.join() !== model.tickers.join() || form.trainStart !== model.trainStart || form.trainEnd !== model.trainEnd;
   }, [form, model]);
+
+  const training = model?.status === "training" || (!!trainJob && (train.status === "queued" || train.status === "running"));
+  const canTest = model?.status === "trained" && !dirty && !training;
 
   async function save(andTrain: boolean) {
     setError("");
@@ -72,6 +77,7 @@ export function ModelPage({ id }: { id: string }) {
         const { jobId } = await modelsApi.train(m.id);
         setTrainJob(jobId);
         setModel({ ...m, status: "training" });
+        setTab("results");
       }
       if (isNew) navigate(`#/model/${m.id}`);
     } catch (e) {
@@ -81,228 +87,227 @@ export function ModelPage({ id }: { id: string }) {
     }
   }
 
-  async function runTest() {
-    if (!model) return;
-    setError("");
-    try {
-      const { jobId } = await modelsApi.test(model.id, test.start, test.end, test.mode);
-      setTestJob(jobId);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-
-  const toggleTicker = (t: string) => setForm((f) => ({
-    ...f, tickers: f.tickers.includes(t) ? f.tickers.filter((x) => x !== t) : f.tickers.length >= 8 ? f.tickers : [...f.tickers, t],
-  }));
-  const training = model?.status === "training" || (trainJob && (train.status === "queued" || train.status === "running"));
-  const testing = testJob && (tst.status === "queued" || tst.status === "running");
-  const latestStart = form.tickers.map((t) => tickers.find((x) => x.ticker === t)?.first ?? "").sort().at(-1);
-  const m = model?.metrics;
-  const canTest = model?.status === "trained" && !dirty;
+  const status = model ? (dirty && model.status === "trained" ? "edited" : model.status) : "draft";
+  const statusLabel: Record<string, string> = { draft: "Not trained", training: "Training", trained: "Trained", failed: "Training failed", edited: "Edited · train again" };
+  const statusClass: Record<string, string> = { draft: "neutral", training: "running", trained: "done", failed: "failed", edited: "running" };
+  const verdict = model?.metrics?.evaluation?.verdict;
 
   return (
     <>
-      <section>
+      <section className="page-head">
         <div className="row small muted"><a href="#/models">Your models</a><span>/</span><span>{isNew ? "New model" : model?.name ?? "…"}</span></div>
-        <div className="row" style={{ marginTop: 8, gap: 10 }}>
-          <input id="model-name" className="title-input" value={form.name} placeholder="Name your model" aria-label="Model name"
-            onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          {model && <span className={`pill ${model.status === "trained" ? "done" : model.status === "failed" ? "failed" : model.status === "training" ? "running" : "neutral"}`}>{dirty && model.status === "trained" ? "edited, needs training" : model.status}</span>}
+        <div className="page-head-row">
+          <div className="page-title">
+            <input id="model-name" className="title-input" value={form.name} placeholder="Name your model" aria-label="Model name"
+              onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <span className={`pill ${statusClass[status]}`}>{statusLabel[status]}</span>
+          </div>
+          <div className="actions">
+            <button className="btn secondary" disabled={saving || training || (!dirty && !!model)} onClick={() => save(false)}>Save</button>
+            <button className="btn secondary" disabled={saving || training} onClick={() => save(true)}>
+              {training ? "Training…" : model?.status === "trained" && !dirty ? "Train again" : "Train"}
+            </button>
+            <button className="btn" disabled={!canTest} title={canTest ? "" : "Train the current version first"}
+              onClick={() => model && navigate(`#/test/${model.id}`)}>Test this model →</button>
+          </div>
+        </div>
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "setup"} onClick={() => setTab("setup")}>Setup</button>
+          <button role="tab" aria-selected={tab === "results"} onClick={() => setTab("results")} disabled={!model}>
+            Training results
+            {training ? <span className="tab-dot running" /> : verdict && !dirty ? <span className={`tab-badge ${verdict.level}`}>{verdict.title}</span> : null}
+          </button>
         </div>
       </section>
 
       {error && <div className="error">{error}</div>}
 
+      {tab === "setup" ? (
+        <Setup form={form} setForm={setForm} tickers={tickers} tpl={tpl} showFormat={showFormat} setShowFormat={setShowFormat} />
+      ) : (
+        <Results model={model} trainJob={trainJob} train={train} training={training} dirty={dirty} canTest={canTest} onTrain={() => save(true)} />
+      )}
+    </>
+  );
+}
+
+function Setup({ form, setForm, tickers, tpl, showFormat, setShowFormat }: {
+  form: ModelInput; setForm: (f: ModelInput) => void; tickers: TickerInfo[]; tpl: Templates | null;
+  showFormat: boolean; setShowFormat: (b: boolean) => void;
+}) {
+  const toggle = (t: string) => setForm({
+    ...form, tickers: form.tickers.includes(t) ? form.tickers.filter((x) => x !== t) : form.tickers.length >= 8 ? form.tickers : [...form.tickers, t],
+  });
+  const latestStart = form.tickers.map((t) => tickers.find((x) => x.ticker === t)?.first ?? "").sort().at(-1);
+  const split = approxSplit(form.trainStart, form.trainEnd);
+  const groups: [string, TickerInfo[]][] = [["ETFs", tickers.filter((t) => t.kind === "etf")], ["Stocks", tickers.filter((t) => t.kind === "stock")]];
+
+  return (
+    <>
       <section className="panel">
-        <div className="panel-head"><h2>1. Data</h2><span className="muted small">Pick up to 8 tickers and the period to train on</span></div>
-        <div className="chips" role="group" aria-label="Tickers">
-          {tickers.map((t) => (
-            <button key={t.ticker} type="button" className="chip" aria-pressed={form.tickers.includes(t.ticker)} onClick={() => toggleTicker(t.ticker)}
-              title={`${t.name} · data from ${t.first}${t.posts ? " · has investor posts (2020)" : ""}`}>
-              <b className="mono">{t.ticker}</b><span>{t.kind === "etf" ? "ETF" : t.name}</span>
-            </button>
-          ))}
+        <div className="card-head">
+          <div><h2>Data</h2><p className="card-sub">The stocks your model trades and the period it learns from.</p></div>
+          <span className="counter">{form.tickers.length} / 8 tickers</span>
         </div>
-        <div className="row" style={{ marginTop: 14 }}>
+        {groups.map(([label, list]) => (
+          <div key={label} className="ticker-group">
+            <span className="group-label">{label}</span>
+            <div className="chips" role="group" aria-label={label}>
+              {list.map((t) => (
+                <button key={t.ticker} type="button" className="chip" aria-pressed={form.tickers.includes(t.ticker)} onClick={() => toggle(t.ticker)}
+                  title={`${t.name} · data from ${t.first}${t.posts ? " · has investor posts (2020)" : ""}`}>
+                  <b className="mono">{t.ticker}</b>{t.kind === "stock" && <span>{t.name}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="period">
           <label className="field small"><span>Training starts</span>
-            <input id="train-start" type="date" value={form.trainStart} min={latestStart} max="2026-11-12" onChange={(e) => setForm({ ...form, trainStart: e.target.value })} /></label>
+            <input id="train-start" type="date" value={form.trainStart} min={latestStart} max={LAST_DAY} onChange={(e) => setForm({ ...form, trainStart: e.target.value })} /></label>
+          <span className="period-arrow" aria-hidden>→</span>
           <label className="field small"><span>Training ends</span>
-            <input id="train-end" type="date" value={form.trainEnd} min={form.trainStart} max="2026-11-12" onChange={(e) => setForm({ ...form, trainEnd: e.target.value })} /></label>
-          <span className="hint" style={{ alignSelf: "end" }}>
-            {form.tickers.length} ticker{form.tickers.length === 1 ? "" : "s"} selected{latestStart ? ` · all have data from ${longDate(latestStart)}` : ""}. Tests must start after training ends.
-          </span>
+            <input id="train-end" type="date" value={form.trainEnd} min={form.trainStart} max={LAST_DAY} onChange={(e) => setForm({ ...form, trainEnd: e.target.value })} /></label>
+          {form.kind === "code" && split && (
+            <div className="split-bar" aria-label="How the training period is used">
+              <div className="split-fit"><span>Learns from (80%)</span><b>{monthYear(form.trainStart)} – ≈{monthYear(split)}</b></div>
+              <div className="split-val"><span>Held out to check (20%)</span><b>≈{monthYear(split)} – {monthYear(form.trainEnd)}</b></div>
+            </div>
+          )}
         </div>
+        {latestStart && <p className="hint" style={{ margin: "10px 0 0" }}>All selected tickers have data from {longDate(latestStart)}. Tests run on dates after training ends.</p>}
       </section>
 
       <section className="panel">
-        <div className="panel-head">
-          <h2>2. Model</h2>
+        <div className="card-head">
+          <div><h2>Model</h2><p className="card-sub">{form.kind === "code" ? "JavaScript with train() and decide(). Runs in a sandbox." : "Your strategy in plain English. Gemini trades it day by day."}</p></div>
           <div className="seg" role="group" aria-label="Model type">
             <button type="button" aria-pressed={form.kind === "code"} onClick={() => setForm({ ...form, kind: "code" })}>Code</button>
             <button type="button" aria-pressed={form.kind === "prompt"} onClick={() => setForm({ ...form, kind: "prompt", prompt: form.prompt || tpl?.promptExample || "" })}>Prompt</button>
           </div>
         </div>
         {form.kind === "code" ? (
-          <div style={{ display: "grid", gap: 10 }}>
-            {tpl && !tpl.customCode && <div className="note">Custom code is turned off on this server.</div>}
-            <div className="row">
-              <label className="small" htmlFor="template">Start from a template</label>
-              <select id="template" defaultValue="" onChange={(e) => {
+          <>
+            {tpl && !tpl.customCode && <div className="note" style={{ marginBottom: 10 }}>Custom code is turned off on this server.</div>}
+            <div className="editor-toolbar">
+              <select id="template" aria-label="Start from a template" defaultValue="" onChange={(e) => {
                 const t = tpl?.code.find((x) => x.id === e.target.value);
-                if (t) setForm({ ...form, code: t.code, name: form.name && form.name !== DEFAULT.name ? form.name : t.name });
+                if (t) setForm({ ...form, code: t.code, name: form.name || t.name });
                 e.target.value = "";
               }}>
-                <option value="" disabled>Choose…</option>
+                <option value="" disabled>Load a template…</option>
                 {tpl?.code.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
               <span className="hint">Replaces the code below.</span>
+              <button type="button" className="btn secondary small-btn" aria-pressed={showFormat} onClick={() => setShowFormat(!showFormat)}>
+                {showFormat ? "Hide format" : "Input and output format"}
+              </button>
             </div>
-            <textarea id="code" className="code" spellCheck={false} value={form.code} aria-label="Model code"
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key !== "Tab") return;
-                e.preventDefault();
-                const el = e.currentTarget, s = el.selectionStart, end = el.selectionEnd;
-                const v = el.value.slice(0, s) + "  " + el.value.slice(end);
-                setForm({ ...form, code: v });
-                requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 2; });
-              }} />
-            <details>
-              <summary className="small">Input and output format</summary>
-              <pre className="briefing" style={{ marginTop: 8 }}>{tpl?.formatDoc}</pre>
-            </details>
-          </div>
+            <div className={`editor-wrap ${showFormat ? "with-doc" : ""}`}>
+              <textarea id="code" className="code" spellCheck={false} value={form.code} aria-label="Model code"
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key !== "Tab") return;
+                  e.preventDefault();
+                  const el = e.currentTarget, s = el.selectionStart, end = el.selectionEnd;
+                  setForm({ ...form, code: el.value.slice(0, s) + "  " + el.value.slice(end) });
+                  requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 2; });
+                }} />
+              {showFormat && <pre className="format-doc">{tpl?.formatDoc}</pre>}
+            </div>
+          </>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            <p className="small muted" style={{ margin: 0 }}>
-              Describe your strategy in plain English. Gemini trades it each day with only that day's prices{form.tickers.some((t) => tickers.find((x) => x.ticker === t)?.posts) ? " and investor posts" : ""}.
-              Training is a graded practice run on the last {tpl?.practiceDays ?? 30} trading days of the training period; the lessons go into every test.
-            </p>
+          <>
             <textarea id="prompt" className="code prose" value={form.prompt} aria-label="Strategy prompt" onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
-          </div>
+            <p className="hint" style={{ margin: "8px 0 0" }}>
+              Training is a graded practice run on the last {tpl?.practiceDays ?? 30} trading days of the training period; Gemini turns the mistakes into lessons the model keeps.
+            </p>
+          </>
         )}
-        <div className="row" style={{ marginTop: 14 }}>
-          <button className="btn" disabled={saving || !!training} onClick={() => save(true)}>{training ? "Training…" : model?.status === "trained" && !dirty ? "Train again" : "Save and train"}</button>
-          <button className="btn secondary" disabled={saving || !!training || !dirty} onClick={() => save(false)}>Save</button>
-          {model?.status === "trained" && dirty && <span className="hint">Edits make a new version; train it before testing.</span>}
-        </div>
       </section>
-
-      {(trainJob || m || model?.status === "failed") && (
-        <section className="panel">
-          <div className="panel-head"><h2>3. Training results</h2>{model?.trainedAt && <span className="muted small">Trained {new Date(model.trainedAt).toLocaleString()}</span>}</div>
-          {trainJob && (train.status === "queued" || train.status === "running") ? (
-            <LiveProgress events={train.events} status={train.status} title="Training" />
-          ) : model?.status === "failed" ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              <div className="error">{model.error}</div>
-              {!!model.logs?.length && <pre className="briefing">{model.logs.join("\n")}</pre>}
-            </div>
-          ) : m ? (
-            <TrainingResults model={model!} />
-          ) : null}
-        </section>
-      )}
-
-      {model && (
-        <section className="panel">
-          <div className="panel-head"><h2>4. Test on a later period</h2><span className="muted small">Same tickers, $100,000 portfolio, graded trade by trade</span></div>
-          <div className="row">
-            <label className="field small"><span>Test starts</span>
-              <input id="test-start" type="date" value={test.start} min={nextDay(model.trainEnd)} max="2026-11-12" onChange={(e) => setTest({ ...test, start: e.target.value })} /></label>
-            <label className="field small"><span>Test ends</span>
-              <input id="test-end" type="date" value={test.end} min={test.start} max="2026-11-12" onChange={(e) => setTest({ ...test, end: e.target.value })} /></label>
-            {model.kind === "prompt" && (
-              <div className="field small"><span>What the agent sees</span>
-                <div className="seg" role="group" aria-label="Mode">
-                  <button type="button" aria-pressed={test.mode === "normal"} onClick={() => setTest({ ...test, mode: "normal" })}>Real names</button>
-                  <button type="button" aria-pressed={test.mode === "blind"} onClick={() => setTest({ ...test, mode: "blind" })}>Blind</button>
-                </div>
-              </div>
-            )}
-            <button className="btn" style={{ alignSelf: "end" }} disabled={!canTest || !!testing} onClick={runTest}>{testing ? "Testing…" : "Run test"}</button>
-          </div>
-          <p className="hint" style={{ margin: "8px 0 0" }}>
-            {!canTest ? "Train the current version first." : `Starts after training ends (${longDate(model.trainEnd)}), so the model is never tested on days it learned from.`}
-            {model.kind === "prompt" && canTest && " Each trading day is one Gemini call."}
-          </p>
-          {testJob && <div style={{ marginTop: 16 }}><LiveProgress events={tst.events} status={tst.status} title="Testing" /></div>}
-          {tests.length > 0 && (
-            <div className="table-wrap" style={{ marginTop: 16 }}>
-              <table>
-                <thead><tr><th>Run</th><th>Test period</th><th>Status</th><th className="num">Return</th><th className="num">SPY</th><th>Version</th></tr></thead>
-                <tbody>
-                  {tests.map((r) => (
-                    <tr key={r.id} className="clickable" onClick={() => navigate(`#/run/${r.id}`)}>
-                      <td><a href={`#/run/${r.id}`} onClick={(e) => e.stopPropagation()}>#{r.position}</a>{r.mode === "blind" ? " · blind" : ""}</td>
-                      <td className="small">{longDate(r.start)} – {longDate(r.end)}</td>
-                      <td><span className={`pill ${r.status}`}>{r.status}</span></td>
-                      <td className="num">{r.summary?.totalReturn != null ? pct(r.summary.totalReturn) : "–"}</td>
-                      <td className="num">{r.summary?.benchmarkReturn != null ? pct(r.summary.benchmarkReturn) : "–"}</td>
-                      <td className="hash">{String((r.config as any)?.params?.versionHash ?? "").slice(0, 8)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
     </>
   );
 }
 
-function TrainingResults({ model }: { model: Model }) {
-  const m = model.metrics!;
+function Results({ model, trainJob, train, training, dirty, canTest, onTrain }: {
+  model: Model | null; trainJob: string | null; train: { events: any[]; status: string };
+  training: boolean; dirty: boolean; canTest: boolean; onTrain: () => void;
+}) {
+  if (!model) return null;
+  if (training && trainJob) {
+    return <section className="panel"><LiveProgress events={train.events} status={train.status} title="Training" /></section>;
+  }
+  if (model.status === "failed") {
+    return (
+      <section className="panel" style={{ display: "grid", gap: 12 }}>
+        <h2>Training failed</h2>
+        <div className="error">{model.error}</div>
+        {!!model.logs?.length && <pre className="briefing">{model.logs.join("\n")}</pre>}
+        <div><button className="btn" onClick={onTrain}>Fix the code in Setup, then train again</button></div>
+      </section>
+    );
+  }
+  const m = model.metrics;
+  if (!m) {
+    return (
+      <section className="panel empty-state">
+        <h2>Not trained yet</h2>
+        <p className="muted">Train the model to see how well it learned: accuracy, F1, a held-out check for overfitting, and its results on the training period.</p>
+        <button className="btn" onClick={onTrain}>Train</button>
+      </section>
+    );
+  }
+  const ev = m.evaluation;
   const curve = m.curve ?? [];
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <p className="small muted" style={{ margin: 0 }}>
-        {model.kind === "code"
-          ? `Training period: ${m.trainDays} trading days. decide() was scored day by day from ${longDate(m.scoredFrom!)}, with fees; the summary below covers the whole period.`
-          : `Practice run from ${longDate(m.practiceFrom!)} to ${longDate(model.trainEnd)}, graded like a test.`}
-        {" "}These are in-sample numbers: a test on later dates is the real exam.
-      </p>
-      <div className="stats">
-        <Stat k="Return" v={pct(m.totalReturn)} />
-        <Stat k="Buy and hold" v={pct(m.buyHoldReturn)} />
-        <Stat k="Sharpe" v={m.sharpe.toFixed(2)} />
-        <Stat k="Worst drop" v={pct(m.maxDrawdown)} />
-        <Stat k="Good trades" v={m.hitRate == null ? "–" : `${Math.round(m.hitRate * 100)}%`} />
-        <Stat k="Invested" v={`${Math.round(m.exposure * 100)}%`} />
-      </div>
-      {m.model && Object.keys(m.model).length > 0 && (
-        <div className="row small">
-          <span className="muted">Reported by train():</span>
-          {Object.entries(m.model).map(([k, v]) => <span className="tag" key={k}>{k} {Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(0)}</span>)}
-        </div>
-      )}
-      {m.evaluation ? (
-        <ModelEvaluation ev={m.evaluation} curve={curve} name={model.name} />
-      ) : curve.length > 1 && (
-        <EquityChart
-          baseline={curve[0].model}
-          series={[
-            { key: "model", label: model.name || "Model", color: "var(--s1)", width: 2.5, points: curve.map((p) => ({ day: p.day, value: p.model })) },
+    <>
+      {dirty && <div className="note">You've edited the model since this training. These results are for the previous version; train again to update them.</div>}
+      <section className="panel">
+        {ev ? <ModelEvaluation ev={ev} curve={curve} name={model.name} /> : (
+          <EquityChart baseline={curve[0]?.model} series={[
+            { key: "model", label: model.name, color: "var(--s1)", width: 2.5, points: curve.map((p) => ({ day: p.day, value: p.model })) },
             { key: "bh", label: "Buy and hold, same tickers", color: "var(--s-bench)", dashed: true, points: curve.filter((p) => p.buyHold != null).map((p) => ({ day: p.day, value: p.buyHold! })) },
-          ]}
-        />
-      )}
-      {model.lessons && (
-        <div>
-          <h3>Lessons it carries into tests</h3>
-          <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>{model.lessons.split("\n").map((l) => l.replace(/^-\s*/, "")).filter(Boolean).map((l) => <li key={l}>{l}</li>)}</ul>
-        </div>
-      )}
-      {!!model.logs?.length && (
-        <details><summary className="small">Output from log() ({model.logs.length})</summary><pre className="briefing" style={{ marginTop: 8 }}>{model.logs.join("\n")}</pre></details>
-      )}
-      <div className="small muted">{m.trades} trades · {usd(100_000 * (1 + m.totalReturn))} from $100,000 · version <span className="hash">{model.versionHash?.slice(0, 12)}</span></div>
-    </div>
-  );
-}
+          ]} />
+        )}
+      </section>
 
-function Stat({ k, v }: { k: string; v: string }) {
-  return <div className="stat"><div className="k">{k}</div><div className="v">{v}</div></div>;
+      {model.lessons && (
+        <section className="panel">
+          <h2>Lessons it carries into tests</h2>
+          <ul className="lessons">{model.lessons.split("\n").map((l) => l.replace(/^-\s*/, "")).filter(Boolean).map((l) => <li key={l}>{l}</li>)}</ul>
+        </section>
+      )}
+
+      <section className="panel">
+        <details>
+          <summary>Training details</summary>
+          <div className="details-body">
+            <div className="row small">
+              <span className="tag">{model.kind === "code" ? `${m.trainDays} trading days` : `practice from ${longDate(m.practiceFrom!)}`}</span>
+              <span className="tag">{m.trades} trades</span>
+              <span className="tag">{pct(m.totalReturn)} vs buy and hold {pct(m.buyHoldReturn)}</span>
+              <span className="tag">worst drop {pct(m.maxDrawdown)}</span>
+              <span className="tag">invested {Math.round(m.exposure * 100)}%</span>
+              <span className="tag">{usd(100_000 * (1 + m.totalReturn))} from $100,000</span>
+              <span className="tag">version {model.versionHash?.slice(0, 10)}</span>
+            </div>
+            {m.model && Object.keys(m.model).length > 0 && (
+              <div className="row small"><span className="muted">Reported by train():</span>
+                {Object.entries(m.model).map(([k, v]) => <span className="tag" key={k}>{k} {Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(0)}</span>)}
+              </div>
+            )}
+            {!!model.logs?.length && <pre className="briefing">{model.logs.join("\n")}</pre>}
+          </div>
+        </details>
+      </section>
+
+      <section className="cta-bar">
+        <div>
+          <b>Ready for the real exam?</b>
+          <span className="muted small"> Test it on dates after {longDate(model.trainEnd)} that it has never seen.</span>
+        </div>
+        <button className="btn" disabled={!canTest} onClick={() => navigate(`#/test/${model.id}`)}>Test this model →</button>
+      </section>
+    </>
+  );
 }
