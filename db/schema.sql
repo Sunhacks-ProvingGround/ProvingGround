@@ -127,3 +127,33 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE INDEX IF NOT EXISTS trades_run_idx ON trades(run_id);
 -- One-line review written by the model after the run (it can see what happened next).
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS ai_review text;
+
+-- ---------- User-built models ----------
+CREATE TABLE IF NOT EXISTS models (
+  id           uuid PRIMARY KEY,
+  name         text NOT NULL,
+  kind         text NOT NULL,                -- 'code' | 'prompt'
+  code         text,                         -- kind = code: JavaScript defining train() and decide()
+  prompt       text,                         -- kind = prompt: the strategy, in plain English
+  tickers      text[] NOT NULL,
+  train_start  date NOT NULL,
+  train_end    date NOT NULL,
+  status       text NOT NULL DEFAULT 'draft', -- draft | training | trained | failed
+  state        jsonb,                        -- what train() returned (code models)
+  lessons      text,                         -- what the practice run taught (prompt models)
+  metrics      jsonb,                        -- training metrics and curves
+  logs         jsonb,
+  error        text,
+  version_hash text,                         -- sha256 of code/prompt + trained state; tests record it
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  trained_at   timestamptz
+);
+
+-- ---------- After-the-fact review of a whole run ----------
+CREATE TABLE IF NOT EXISTS run_reviews (
+  run_id     uuid PRIMARY KEY REFERENCES runs(id),
+  summary    text,
+  missed     jsonb,      -- biggest moves sat out, drops held through, vs buy-and-hold
+  created_at timestamptz NOT NULL DEFAULT now()
+);

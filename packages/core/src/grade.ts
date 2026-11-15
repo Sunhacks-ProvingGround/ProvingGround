@@ -1,5 +1,5 @@
 import { db } from "./db.js";
-import { GRADE_HORIZON_DAYS } from "./universe.js";
+import { GRADE_HORIZON_DAYS, TRADE_TICKERS } from "./universe.js";
 
 /**
  * Trade report card.
@@ -51,33 +51,36 @@ export interface ReportCard {
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
 const fmtDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-/** Grades every trade of a run, saves the grades on the trades, and returns the report card. */
-export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Promise<ReportCard> {
-  const { rows } = await db().query(
-    `SELECT id, to_char(decided_on,'YYYY-MM-DD') AS decided_on, to_char(filled_on,'YYYY-MM-DD') AS filled_on,
-            ticker, side, qty, price, fee, reason, ai_review
-       FROM trades WHERE run_id = $1 ORDER BY id`,
-    [runId],
-  );
+export interface TradeInput {
+  id: number;
+  decidedOn: string;
+  filledOn: string;
+  ticker: string;
+  side: "buy" | "sell";
+  qty: number;
+  price: number;
+  fee: number;
+  reason?: string | null;
+  aiReview?: string | null;
+}
 
+/** Grades trades against the closes `horizon` trading days after each fill. Reads prices; writes nothing. */
+export async function gradeTrades(input: TradeInput[], horizon = GRADE_HORIZON_DAYS): Promise<GradedTrade[]> {
   const trades: GradedTrade[] = [];
-  for (const r of rows) {
+  for (const r of input) {
     // The close `horizon` trading days after the fill (the fill day counts as day 0).
     const { rows: later } = await db().query(
       `SELECT to_char(day,'YYYY-MM-DD') AS day, close FROM prices
         WHERE ticker = $1 AND day > $2 ORDER BY day OFFSET $3 LIMIT 1`,
-      [r.ticker, r.filled_on, horizon - 1],
+      [r.ticker, r.filledOn, horizon - 1],
     );
-    const price = Number(r.price);
-    const qty = Number(r.qty);
-    const fee = Number(r.fee);
+    const { price, qty, fee } = r;
     const amount = qty * price;
     const feeRate = amount > 0 ? fee / amount : 0;
     const base = {
-      id: Number(r.id), decidedOn: r.decided_on, filledOn: r.filled_on, ticker: r.ticker, side: r.side,
-      qty, price, fee, amount, reason: r.reason, aiReview: r.ai_review,
+      id: r.id, decidedOn: r.decidedOn, filledOn: r.filledOn, ticker: r.ticker, side: r.side,
+      qty, price, fee, amount, reason: r.reason ?? null, aiReview: r.aiReview ?? null,
     };
-
     if (!later.length) {
       trades.push({ ...base, laterDay: null, laterPrice: null, fwdReturn: null, edge: null, edgeDollars: null, grade: "ungraded",
         explanation: `Not enough later prices to grade this ${r.side}.` });
@@ -101,18 +104,13 @@ export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Pro
     }
     trades.push({
       ...base, laterDay: later[0].day, laterPrice, fwdReturn: fwd, edge, edgeDollars: edge * amount, grade,
-      explanation: `${verb} ${r.ticker} at ${price.toFixed(2)} on ${fmtDate(r.filled_on)}; ${move}. ${verdict}`,
+      explanation: `${verb} ${r.ticker} at ${price.toFixed(2)} on ${fmtDate(r.filledOn)}; ${move}. ${verdict}`,
     });
   }
+  return trades;
+}
 
-  // Save the grades. (The run's seal covers what the agent did, not the grades, so this doesn't break it.)
-  for (const t of trades) {
-    await db().query(
-      `UPDATE trades SET fwd_return = $2, edge_vs_cash = $3, grade = $4, explanation = $5 WHERE id = $1`,
-      [t.id, t.fwdReturn, t.edge, t.grade, t.explanation],
-    );
-  }
-
+export function reportCard(runId: string, trades: GradedTrade[], horizon = GRADE_HORIZON_DAYS): ReportCard {
   const count = (g: GradedTrade["grade"]) => trades.filter((t) => t.grade === g).length;
   const sum = (g: GradedTrade["grade"]) => trades.filter((t) => t.grade === g).reduce((s, t) => s + (t.edgeDollars ?? 0), 0);
   return {
@@ -124,6 +122,29 @@ export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Pro
     badDollars: sum("bad"),
     biggest: [...trades].filter((t) => t.edgeDollars != null).sort((a, b) => Math.abs(b.edgeDollars!) - Math.abs(a.edgeDollars!)).slice(0, 5),
   };
+}
+
+/** Grades every trade of a run, saves the grades on the trades, and returns the report card. */
+export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Promise<ReportCard> {
+  const { rows } = await db().query(
+    `SELECT id, to_char(decided_on,'YYYY-MM-DD') AS decided_on, to_char(filled_on,'YYYY-MM-DD') AS filled_on,
+            ticker, side, qty, price, fee, reason, ai_review
+       FROM trades WHERE run_id = $1 ORDER BY id`,
+    [runId],
+  );
+  const trades = await gradeTrades(rows.map((r) => ({
+    id: Number(r.id), decidedOn: r.decided_on, filledOn: r.filled_on, ticker: r.ticker, side: r.side,
+    qty: Number(r.qty), price: Number(r.price), fee: Number(r.fee), reason: r.reason, aiReview: r.ai_review,
+  })), horizon);
+
+  // Save the grades. (The run's seal covers what the agent did, not the grades, so this doesn't break it.)
+  for (const t of trades) {
+    await db().query(
+      `UPDATE trades SET fwd_return = $2, edge_vs_cash = $3, grade = $4, explanation = $5 WHERE id = $1`,
+      [t.id, t.fwdReturn, t.edge, t.grade, t.explanation],
+    );
+  }
+  return reportCard(runId, trades, horizon);
 }
 
 export interface GapSide {
@@ -153,7 +174,8 @@ export interface LeakageGap {
  * so single runs swing a lot. By default both sides saw investor posts (like
  * for like); pass {posts: false} to compare against prices-only blind runs.
  */
-export async function leakageGap(start: string, end: string, opts: { posts?: boolean } = {}): Promise<LeakageGap | null> {
+export async function leakageGap(start: string, end: string, opts: { posts?: boolean; tickers?: string[] } = {}): Promise<LeakageGap | null> {
+  const tickers = JSON.stringify(opts.tickers ?? TRADE_TICKERS);
   const runsOf = async (mode: "normal" | "blind", posts: boolean, model: string | null) => {
     const { rows } = await db().query(
       `SELECT id, seq, config, summary FROM runs
@@ -161,8 +183,9 @@ export async function leakageGap(start: string, end: string, opts: { posts?: boo
           AND config->>'start' = $2 AND config->>'end' = $3
           AND coalesce((config->'params'->>'posts')::boolean, true) = $4
           AND ($5::text IS NULL OR config->'params'->>'model' = $5)
+          AND config->'tradeable' = $6::jsonb
         ORDER BY seq DESC`,
-      [mode, start, end, posts, model],
+      [mode, start, end, posts, model, tickers],
     );
     return rows;
   };

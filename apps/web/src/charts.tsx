@@ -14,6 +14,9 @@ export interface LineSeries {
 }
 
 const tickDate = (d: string) => shortDate(d);
+const monthYear = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+/** Short dates for spans under ~13 months, month and year beyond that. */
+const tickFor = (days: string[]) => (days.length > 1 && Date.parse(days.at(-1)!) - Date.parse(days[0]) > 400 * 86400000 ? monthYear : tickDate);
 const tickMoney = (v: number) =>
   Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(Number.isInteger(v / 1000) ? 0 : 1)}k` : `$${v}`;
 
@@ -34,7 +37,7 @@ export function EquityChart({ series, height = 320, baseline }: { series: LineSe
         <ResponsiveContainer>
           <LineChart data={data} margin={{ top: 8, right: 28, bottom: 4, left: 4 }}>
             <CartesianGrid vertical={false} strokeDasharray="0" />
-            <XAxis dataKey="day" tickFormatter={tickDate} minTickGap={32} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
+            <XAxis dataKey="day" tickFormatter={tickFor(days)} minTickGap={40} tickLine={false} axisLine={{ stroke: "var(--line)" }} />
             <YAxis tickFormatter={tickMoney} width={52} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
             {baseline != null && <ReferenceLine y={baseline} stroke="var(--ink-3)" strokeDasharray="2 3" />}
             <Tooltip
@@ -117,7 +120,7 @@ export function PriceWithTrades({ ticker, prices, trades, height = 240 }: {
       <ResponsiveContainer>
         <ComposedChart data={data} margin={{ top: 10, right: 28, bottom: 4, left: 4 }}>
           <CartesianGrid vertical={false} />
-          <XAxis dataKey="day" tickFormatter={tickDate} minTickGap={32} tickLine={false} axisLine={{ stroke: "var(--line)" }} allowDuplicatedCategory={false} />
+          <XAxis dataKey="day" tickFormatter={tickFor(prices.map((p) => p.day))} minTickGap={40} tickLine={false} axisLine={{ stroke: "var(--line)" }} allowDuplicatedCategory={false} />
           <YAxis width={52} tickLine={false} axisLine={false} domain={["auto", "auto"]} tickFormatter={(v) => v.toFixed(v < 20 ? 1 : 0)} />
           <Tooltip
             cursor={{ stroke: "var(--ink-3)", strokeWidth: 1 }}

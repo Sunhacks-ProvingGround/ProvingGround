@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type RunDetail as Detail, type Trade } from "../api";
+import { api, type RunDetail as Detail, type Trade, type RunReview } from "../api";
 import { EquityChart, PriceWithTrades, TradeLegend, GradePill } from "../charts";
 import { agentLabel, pct, usd, shortDate, windowLabel } from "../format";
 
@@ -28,7 +28,7 @@ export function RunDetail({ id }: { id: string }) {
   if (error) return <div className="error">{error}</div>;
   if (!d) return <div className="panel muted">Loading run…</div>;
 
-  const { run, days, trades, decisions, prices } = d;
+  const { run, days, trades, decisions, prices, review } = d;
   const s = run.summary;
   const spy = prices.SPY ?? [];
   const tickers = Object.keys(prices).filter((t) => t !== "SPY");
@@ -41,7 +41,8 @@ export function RunDetail({ id }: { id: string }) {
         <div className="row small muted"><a href="#/runs">Run log</a><span>/</span><span>Run #{run.position}</span></div>
         <h1 style={{ marginTop: 6 }}>{agentLabel(run)}</h1>
         <p className="lede">
-          {windowLabel(run.start, run.end)}
+          {run.agent === "model" && run.modelId && <><a href={`#/model/${run.modelId}`}>Model page</a> · </>}
+          <span className="mono">{run.tickers?.join(" ")}</span> · {windowLabel(run.start, run.end)}
           {run.model && <> · <span className="mono">{run.model}</span></>}
           {" · "}<span className={`pill ${run.status}`}>{run.status}</span>
         </p>
@@ -58,6 +59,8 @@ export function RunDetail({ id }: { id: string }) {
           <Stat k="Good / bad" v={`${counts.good} / ${counts.bad}`} />
         </section>
       )}
+
+      {review && <MissedPanel review={review} />}
 
       {trades.length > 0 && (
         <section className="panel">
@@ -179,5 +182,36 @@ function TradeRow({ t }: { t: Trade }) {
         {t.reason && <div className="small muted" style={{ marginTop: 4 }}><b>Agent's reason:</b> {t.reason.length > 220 ? `${t.reason.slice(0, 220)}…` : t.reason}</div>}
       </td>
     </tr>
+  );
+}
+
+function MissedPanel({ review }: { review: RunReview }) {
+  const r = review;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>What the model missed</h2>
+        <span className="muted small">Judged on the days after each decision, which the model could not see</span>
+      </div>
+      <p style={{ margin: "0 0 14px" }}>{r.summary}</p>
+      <div className="stats" style={{ marginBottom: 16 }}>
+        <Stat k="Model" v={pct(r.totalReturn)} />
+        <Stat k="Buy and hold, same tickers" v={pct(r.buyHoldReturn)} />
+        <Stat k="Difference" v={pct(r.totalReturn - r.buyHoldReturn)} />
+        <Stat k="Invested on average" v={`${Math.round(r.exposure * 100)}%`} />
+      </div>
+      <div className="missed-grid">
+        <div>
+          <h3>Rallies it sat out</h3>
+          {r.missedRallies.length ? <ul className="small">{r.missedRallies.map((m) => <li key={m.ticker + m.day}><b>{m.ticker}</b> {pct(m.move)} in the 5 days from {shortDate(m.day)}, holding {Math.round(m.weight * 100)}%</li>)}</ul> : <p className="small muted">None worth noting.</p>}
+        </div>
+        <div>
+          <h3>Drops it held through</h3>
+          {r.heldDrops.length ? <ul className="small">{r.heldDrops.map((m) => <li key={m.ticker + m.day}><b>{m.ticker}</b> {pct(m.move)} from {shortDate(m.day)} with {Math.round(m.weight * 100)}% of the portfolio <span className="nowrap">({usd(m.dollars, true)})</span></li>)}</ul> : <p className="small muted">None worth noting.</p>}
+        </div>
+        {r.missed.length > 0 && <div><h3>What it missed</h3><ul className="small">{r.missed.map((x) => <li key={x}>{x}</li>)}</ul></div>}
+        {r.tryNext.length > 0 && <div><h3>Try next</h3><ul className="small">{r.tryNext.map((x) => <li key={x}>{x}</li>)}</ul></div>}
+      </div>
+    </section>
   );
 }

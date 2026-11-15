@@ -77,6 +77,35 @@ run shows up.
 Strategies return target weights (for example `{AAPL: 0.5, NVDA: 0.3}` with the rest in
 cash), or `null` to hold. Trades smaller than 1% of the portfolio are skipped.
 
+## Your models: build, train, test
+
+On the **Your models** page you pick up to 8 of the 26 tickers and a training period, then
+write either:
+
+- **Code**: JavaScript defining `train(data)` and `decide(state, history, portfolio)`. The
+  format is documented on the page, and there are three templates (momentum, ridge
+  regression, mean reversion). Code runs in a sandbox: its own worker thread, a fresh V8
+  context with no `require`, `process`, files, network, `eval` or `Function`, a memory cap
+  and time limits (60 s for `train`, 2 s per `decide`). Set `CUSTOM_CODE=off` on a public
+  server.
+- **Prompt**: a strategy in plain English for the Gemini agent.
+
+**Training** reads only the training period (through the same "no future" database rule).
+Code models run `train()`, then `decide()` is scored day by day on the training period
+(return vs equal-weight buy-and-hold of the same tickers, Sharpe, worst drop, share of good
+trades, exposure). Prompt models do a graded practice run on the last 30 trading days and
+Gemini turns the mistakes into lessons the model carries into its tests.
+
+**Testing** must start after training ends. The test is registered in the run log with the
+model's version hash (code or prompt plus what training produced), every trade is graded and
+reviewed, and **What the model missed** lists the biggest rallies it sat out, the drops it held
+through, how it compared with buy-and-hold, and what to try next.
+
+Data: `data/prices.csv` holds 26 tickers (22 large US stocks plus SPY, QQQ, GLD, TLT) from 1999
+to Nov 2026, split- and dividend-adjusted, from
+[Johnbrick123/sp500-data](https://github.com/Johnbrick123/sp500-data). Re-run `pnpm db:load`
+after pulling.
+
 ## The app
 
 ```bash

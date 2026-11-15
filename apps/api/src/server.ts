@@ -5,9 +5,9 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { WINDOWS, type RunRequest } from "@pg/core";
-import { createJob, getJob, listJobs } from "./jobs.js";
-import { agentPreview, getRun, listRuns, meta, overview, verify } from "./queries.js";
+import { WINDOWS, listModels, getModel, createModel, updateModel, CODE_TEMPLATES, MODEL_FORMAT_DOC, PROMPT_EXAMPLE, PRACTICE_DAYS, MIN_TRAIN_DAYS, type RunRequest, type ModelInput } from "@pg/core";
+import { createJob, createTrainJob, getJob, listJobs } from "./jobs.js";
+import { agentPreview, getRun, listRuns, meta, overview, verify, tickers, modelRuns } from "./queries.js";
 
 const app = new Hono();
 
@@ -62,7 +62,46 @@ api.post("/runs", async (c) => {
   }
 });
 
-/** Live progress of a started run, as server-sent events. Replays what already happened. */
+api.get("/tickers", async (c) => c.json({ tickers: await tickers() }));
+
+api.get("/templates", (c) => c.json({ code: CODE_TEMPLATES, formatDoc: MODEL_FORMAT_DOC, promptExample: PROMPT_EXAMPLE, practiceDays: PRACTICE_DAYS, minTrainDays: MIN_TRAIN_DAYS, customCode: process.env.CUSTOM_CODE !== "off" }));
+
+const modelSummary = ({ code, prompt, state, logs, ...m }: any) => ({ ...m, metrics: m.metrics ? { ...m.metrics, curve: undefined } : null });
+
+api.get("/models", async (c) => c.json({ models: (await listModels()).map(modelSummary) }));
+
+api.post("/models", async (c) => {
+  try {
+    return c.json(await createModel((await c.req.json()) as ModelInput), 201);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+api.get("/models/:id", async (c) => {
+  const m = await getModel(c.req.param("id"));
+  if (!m) return c.json({ error: "Model not found" }, 404);
+  const active = listJobs().find((j) => j.task.kind === "train" && j.task.modelId === m.id);
+  return c.json({ model: m, tests: await modelRuns(m.id), trainJobId: active?.id ?? null });
+});
+
+api.put("/models/:id", async (c) => {
+  try {
+    return c.json(await updateModel(c.req.param("id"), (await c.req.json()) as ModelInput));
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 400);
+  }
+});
+
+/** Train a model. Returns a job id; follow it with GET /api/jobs/:id/stream. */
+api.post("/models/:id/train", async (c) => {
+  const m = await getModel(c.req.param("id"));
+  if (!m) return c.json({ error: "Model not found" }, 404);
+  const job = createTrainJob(m.id);
+  return c.json({ jobId: job.id, status: job.status }, 202);
+});
+
+/** Live progress of a started run or training job, as server-sent events. Replays what already happened. */
 api.get("/jobs/:id/stream", (c) => {
   const job = getJob(c.req.param("id"));
   if (!job) return c.json({ error: "Job not found" }, 404);

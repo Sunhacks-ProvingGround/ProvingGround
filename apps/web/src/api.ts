@@ -12,12 +12,16 @@ export interface RunSummary {
 export interface Run {
   id: string;
   position: number;
-  agent: "llm" | "buy_and_hold" | "sma_crossover";
+  agent: "llm" | "buy_and_hold" | "sma_crossover" | "model";
   mode: "normal" | "blind";
   status: "queued" | "running" | "done" | "failed";
   start: string;
   end: string;
   model: string | null;
+  modelId: string | null;
+  modelName: string | null;
+  modelKind: "code" | "prompt" | null;
+  tickers: string[];
   posts: boolean | null;
   config: Record<string, unknown>;
   summary: RunSummary | null;
@@ -60,6 +64,7 @@ export interface RunDetail {
   decisions: Decision[];
   prices: Record<string, { day: string; close: number }[]>;
   horizonDays: number;
+  review: RunReview | null;
 }
 export interface GapSide {
   /** Average return over every finished run of this kind. */
@@ -127,4 +132,49 @@ export const api = {
     if (!res.ok) throw new Error(body.error ?? `Couldn't start the run (${res.status})`);
     return body;
   },
+};
+
+export interface TickerInfo { ticker: string; name: string; kind: "stock" | "etf"; first: string; last: string; posts: boolean }
+export interface ModelMetrics {
+  totalReturn: number; buyHoldReturn: number; vsBuyHold: number; sharpe: number; maxDrawdown: number;
+  exposure: number; trades: number; hitRate: number | null; days: number;
+  model?: Record<string, number>; scoredFrom?: string; practiceFrom?: string; trainDays?: number; errors?: number;
+  curve?: { day: string; model: number; buyHold: number | null }[];
+}
+export interface Model {
+  id: string; name: string; kind: "code" | "prompt"; code: string | null; prompt: string | null; tickers: string[];
+  trainStart: string; trainEnd: string; status: "draft" | "training" | "trained" | "failed";
+  lessons: string | null; metrics: ModelMetrics | null; logs: string[] | null; error: string | null;
+  versionHash: string | null; createdAt: string; updatedAt: string; trainedAt: string | null;
+}
+export interface ModelInput { name: string; kind: "code" | "prompt"; code?: string; prompt?: string; tickers: string[]; trainStart: string; trainEnd: string }
+export interface Templates {
+  code: { id: string; name: string; description: string; code: string }[];
+  formatDoc: string; promptExample: string; practiceDays: number; minTrainDays: number; customCode: boolean;
+}
+export interface RunReview {
+  totalReturn: number; buyHoldReturn: number; exposure: number;
+  missedRallies: { ticker: string; day: string; move: number; weight: number; dollars: number }[];
+  heldDrops: { ticker: string; day: string; move: number; weight: number; dollars: number }[];
+  counts: { good: number; bad: number; neutral: number };
+  summary: string; missed: string[]; tryNext: string[];
+}
+
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error ?? `Request failed (${res.status})`);
+  return out as T;
+}
+
+export const modelsApi = {
+  tickers: () => get<{ tickers: TickerInfo[] }>("/api/tickers"),
+  templates: () => get<Templates>("/api/templates"),
+  list: () => get<{ models: Model[] }>("/api/models"),
+  get: (id: string) => get<{ model: Model; tests: Run[]; trainJobId: string | null }>(`/api/models/${id}`),
+  create: (m: ModelInput) => send<Model>("POST", "/api/models", m),
+  update: (id: string, m: ModelInput) => send<Model>("PUT", `/api/models/${id}`, m),
+  train: (id: string) => send<{ jobId: string }>("POST", `/api/models/${id}/train`),
+  test: (modelId: string, start: string, end: string, mode: "normal" | "blind") =>
+    send<{ jobId: string }>("POST", "/api/runs", { strategy: "model", modelId, start, end, mode }),
 };

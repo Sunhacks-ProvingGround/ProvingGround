@@ -1,6 +1,6 @@
 import {
   db, leakageGap, verifyRunLog, agentBriefing, NormalView, BlindView, Disguise, MarketView,
-  TRADE_TICKERS, BENCHMARK, GRADE_HORIZON_DAYS, WINDOWS, STRATEGIES, geminiModelId,
+  TRADE_TICKERS, BENCHMARK, GRADE_HORIZON_DAYS, WINDOWS, STRATEGIES, geminiModelId, TICKER_INFO,
   type DecisionContext,
 } from "@pg/core";
 
@@ -20,6 +20,10 @@ function shapeRun(r: any) {
     start: r.config?.start,
     end: r.config?.end,
     model: r.config?.params?.model ?? null,
+    modelId: r.config?.params?.modelId ?? null,
+    modelName: r.config?.params?.modelName ?? null,
+    modelKind: r.config?.params?.kind ?? null,
+    tickers: r.config?.tradeable ?? [],
     posts: r.agent === "llm" ? (r.config?.params?.posts ?? true) : null,
     config: r.config,
     summary: r.summary,
@@ -51,7 +55,8 @@ export async function getRun(id: string) {
     `SELECT id, to_char(decided_on,'YYYY-MM-DD') AS decided_on, to_char(filled_on,'YYYY-MM-DD') AS filled_on,
             ticker, side, qty, price, fee, reason, fwd_return, edge_vs_cash, grade, explanation, ai_review
        FROM trades WHERE run_id = $1 ORDER BY id`, [id]);
-  const prices = await windowPrices(run.start, run.end);
+  const prices = await windowPrices(run.start, run.end, [...(run.config?.tradeable as string[] ?? TRADE_TICKERS), BENCHMARK]);
+  const { rows: rv } = await db().query("SELECT summary, missed FROM run_reviews WHERE run_id = $1", [id]);
 
   return {
     run,
@@ -68,17 +73,18 @@ export async function getRun(id: string) {
       };
     }),
     decisions: rows[0].decisions ?? [],
+    review: rv[0]?.missed ?? null,
     prices,
     horizonDays: GRADE_HORIZON_DAYS,
   };
 }
 
 /** Daily closes for every ticker over a window (for charts). */
-export async function windowPrices(start: string, end: string) {
+export async function windowPrices(start: string, end: string, tickers: string[] = [...TRADE_TICKERS, BENCHMARK]) {
   const { rows } = await db().query(
     `SELECT ticker, to_char(day,'YYYY-MM-DD') AS day, close FROM prices
       WHERE ticker = ANY($1) AND day BETWEEN $2 AND $3 ORDER BY day`,
-    [[...TRADE_TICKERS, BENCHMARK], start, end],
+    [tickers, start, end],
   );
   const out: Record<string, { day: string; close: number }[]> = {};
   for (const r of rows) (out[r.ticker] ??= []).push({ day: r.day, close: Number(r.close) });
@@ -104,8 +110,9 @@ export async function overview(windowKey: keyof typeof WINDOWS) {
     const { rows } = await db().query(
       `SELECT * FROM (SELECT ${RUN_FIELDS} FROM runs r) x
         WHERE status = 'done' AND config->>'start' = $1 AND config->>'end' = $2 AND ${k.where}
+          AND config->'tradeable' = $3::jsonb
         ORDER BY seq DESC LIMIT 1`,
-      [w.start, w.end],
+      [w.start, w.end, JSON.stringify(TRADE_TICKERS)],
     );
     if (!rows.length) continue;
     const run = shapeRun(rows[0]);
@@ -162,4 +169,20 @@ export async function agentPreview(day: string, windowKey: keyof typeof WINDOWS)
     normal: await agentBriefing(ctx, new NormalView(market, TRADE_TICKERS, BENCHMARK)),
     blind: await agentBriefing(ctx, new BlindView(market, TRADE_TICKERS, BENCHMARK, disguise)),
   };
+}
+
+export async function tickers() {
+  const { rows } = await db().query(
+    `SELECT ticker, min(day)::text AS first, max(day)::text AS last FROM prices GROUP BY ticker`);
+  const cov = Object.fromEntries(rows.map((r) => [r.ticker, r]));
+  const { rows: p } = await db().query("SELECT DISTINCT ticker FROM posts");
+  const withPosts = new Set(p.map((r) => r.ticker));
+  return TICKER_INFO.filter((t) => cov[t.ticker]).map((t) => ({ ...t, first: cov[t.ticker].first, last: cov[t.ticker].last, posts: withPosts.has(t.ticker) }));
+}
+
+/** Tests of one model, newest first. */
+export async function modelRuns(modelId: string) {
+  const { rows } = await db().query(
+    `SELECT * FROM (SELECT ${RUN_FIELDS} FROM runs r) x WHERE config->'params'->>'modelId' = $1 ORDER BY seq DESC`, [modelId]);
+  return rows.map(shapeRun);
 }

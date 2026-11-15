@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Run } from "../api";
-import { agentLabel, pct, navigate } from "../format";
+import { agentLabel, pct, navigate, shortDate } from "../format";
 
 export function Runs() {
   const [runs, setRuns] = useState<Run[] | null>(null);
@@ -49,7 +49,7 @@ export function Runs() {
                 <tr key={r.id} className="clickable" onClick={() => navigate(`#/run/${r.id}`)}>
                   <td className="num"><a href={`#/run/${r.id}`} onClick={(e) => e.stopPropagation()}>{r.position}</a></td>
                   <td>{agentLabel(r)}</td>
-                  <td className="mono small">{r.start?.slice(0, 4) === "2026" ? "2026 control" : "2020 crash"}</td>
+                  <td className="small" style={{ whiteSpace: "nowrap" }}>{shortDate(r.start)} {r.start.slice(0, 4)} – {shortDate(r.end)} {r.end.slice(0, 4)}<div className="mono muted">{r.tickers?.join(" ")}</div></td>
                   <td><span className={`pill ${r.status}`}>{r.status}</span></td>
                   <td className="num">{r.summary?.totalReturn != null ? pct(r.summary.totalReturn) : "–"}</td>
                   <td className="num">{r.summary?.trades ?? "–"}</td>

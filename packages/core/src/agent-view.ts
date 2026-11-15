@@ -1,5 +1,6 @@
 import { db } from "./db.js";
 import { MarketView } from "./market-view.js";
+import { tickerName } from "./universe.js";
 
 /**
  * What the AI agent sees. Two versions with the same shape:
@@ -46,7 +47,6 @@ export class NormalView implements AgentView {
     private market: MarketView,
     private trade: string[],
     private bench: string,
-    private names: Record<string, string> = { AAPL: "Apple Inc.", NVDA: "NVIDIA Corporation", SPY: "SPDR S&P 500 ETF (the US stock market)" },
   ) {}
   today() {
     const d = new Date(`${this.market.simDate}T12:00:00Z`);
@@ -55,7 +55,7 @@ export class NormalView implements AgentView {
   tradeable() { return this.trade; }
   benchmark() { return this.bench; }
   describe() {
-    return Object.fromEntries([...this.trade, this.bench].map((t) => [t, this.names[t] ?? t]));
+    return Object.fromEntries([...this.trade, this.bench].map((t) => [t, tickerName(t)]));
   }
   async getPrices(name: string, days: number) {
     const bars = await this.market.getPrices(name, days);

@@ -32,6 +32,14 @@ export interface LlmAgentOptions {
   model?: string;
   /** Show investor posts (default true). Off = prices only. */
   includePosts?: boolean;
+  /** The user's own strategy, in plain English (prompt models). */
+  strategyPrompt?: string;
+  /** Lessons from the model's practice run, carried into the test. */
+  lessons?: string;
+  /** Strategy id saved with the run (default "llm"). */
+  id?: string;
+  /** Extra settings saved with the run and covered by its hash. */
+  extraParams?: Record<string, unknown>;
   /** Called after each decision, for progress output. */
   onDecision?: (log: LlmDecisionLog) => void;
 }
@@ -91,13 +99,17 @@ export function llmAgent(opts: LlmAgentOptions): Strategy & { decisions: LlmDeci
   const agent = new Agent({
     id: "provingground-trader",
     name: "ProvingGround trader",
-    instructions: INSTRUCTIONS,
+    instructions: [
+      INSTRUCTIONS,
+      opts.strategyPrompt?.trim() ? `\nThe fund's strategy, written by its owner. Follow it:\n${opts.strategyPrompt.trim()}` : "",
+      opts.lessons?.trim() ? `\nLessons from your practice period (apply them):\n${opts.lessons.trim()}` : "",
+    ].join("\n"),
     model: gemini(modelId),
   });
 
   return {
-    id: "llm",
-    params: { model: modelId, mode: opts.mode, posts: includePosts, promptVersion: PROMPT_VERSION },
+    id: opts.id ?? "llm",
+    params: { model: modelId, mode: opts.mode, posts: includePosts, promptVersion: PROMPT_VERSION, ...opts.extraParams },
     decisions,
     async decide(ctx) {
       if (opts.mode === "blind" && !disguise) {

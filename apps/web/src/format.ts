@@ -21,7 +21,8 @@ export const shortDate = (d: string) => {
 export const longDate = (d: string) =>
   new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-export function agentLabel(r: Pick<Run, "agent" | "mode" | "posts">): string {
+export function agentLabel(r: Pick<Run, "agent" | "mode" | "posts"> & Partial<Pick<Run, "modelName" | "modelKind">>): string {
+  if (r.agent === "model") return `${r.modelName ?? "Your model"}${r.modelKind === "prompt" && r.mode === "blind" ? " · blind" : ""}`;
   if (r.agent === "llm") {
     if (r.mode === "blind") return r.posts === false ? "AI agent · blind, prices only" : "AI agent · blind";
     return "AI agent · normal";
