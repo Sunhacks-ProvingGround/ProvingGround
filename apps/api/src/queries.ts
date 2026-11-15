@@ -123,7 +123,13 @@ export async function overview(windowKey: keyof typeof WINDOWS) {
   }
   const gap = await leakageGap(w.start, w.end);
   const gapPricesOnly = await leakageGap(w.start, w.end, { posts: false });
-  return { window: { key: windowKey, ...w }, series, gap, gapPricesOnly };
+  // The control window's gap measures what the disguise itself costs (there is
+  // nothing to remember after the model's training data ends). Subtracting it
+  // leaves the part of the gap that comes from memory.
+  const c = WINDOWS.control;
+  const controlGap = windowKey === "control" ? gap : await leakageGap(c.start, c.end);
+  const memoryEffect = windowKey !== "control" && gap && controlGap ? gap.gap - controlGap.gap : null;
+  return { window: { key: windowKey, ...w }, series, gap, gapPricesOnly, controlGap, memoryEffect };
 }
 
 export async function verify() {

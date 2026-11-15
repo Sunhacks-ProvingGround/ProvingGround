@@ -14,7 +14,8 @@ export interface LineSeries {
 }
 
 const tickDate = (d: string) => shortDate(d);
-const tickMoney = (v: number) => (Math.abs(v) >= 1000 ? `$${Math.round(v / 1000)}k` : `$${v}`);
+const tickMoney = (v: number) =>
+  Math.abs(v) >= 1000 ? `$${(v / 1000).toFixed(Number.isInteger(v / 1000) ? 0 : 1)}k` : `$${v}`;
 
 /** Several value-over-time lines on one axis, with a shared crosshair tooltip and a legend. */
 export function EquityChart({ series, height = 320, baseline }: { series: LineSeries[]; height?: number; baseline?: number }) {

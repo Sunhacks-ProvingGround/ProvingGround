@@ -61,13 +61,28 @@ export function Overview({ windowKey, setWindowKey }: { windowKey: string; setWi
                   <div className="gap-number" style={{ color: g.gap > 0.01 ? "var(--bad-ink)" : "var(--ink)" }}>{pts(g.gap)}</div>
                   <p className="small muted" style={{ marginBottom: 0 }}>
                     {isControl
-                      ? "After the model's training data ends, it has nothing to remember. A gap near zero here means the 2020 gap is memory, not noise."
-                      : "Return the agent got from recognising the period instead of from skill."}
+                      ? "After the model's training data ends it has nothing to remember, so this gap is what the disguise alone costs."
+                      : "How much better the agent did, on average, when it could see real names and dates."}
                   </p>
                 </div>
                 <GapBars data={data} />
               </div>
-            ) : (
+            ) : null}
+            {g && !isControl && data.controlGap && data.memoryEffect != null ? (
+              <div className="memory">
+                <div>
+                  <div className="gap-label">Memory effect</div>
+                  <div className="num" style={{ fontSize: 30, fontWeight: 600 }}>{pts(data.memoryEffect)}</div>
+                </div>
+                <p className="small" style={{ margin: 0 }}>
+                  The disguise itself costs something: on the 2026 control window, where the model has nothing to remember, the blind
+                  agent still trailed by <b className="num">{pts(data.controlGap.gap)}</b>. Subtracting that from the 2020 gap
+                  (<b className="num">{pts(g.gap)}</b>) leaves the part that comes from recognising the period.
+                </p>
+              </div>
+            ) : null}
+            {g ? null : (
+
               <div>
                 <h2>No Leakage Gap yet for this window</h2>
                 <p className="lede">It needs one finished AI run in normal mode and one in blind mode on these dates.</p>
@@ -78,7 +93,7 @@ export function Overview({ windowKey, setWindowKey }: { windowKey: string; setWi
 
           <section className="panel">
             <div className="panel-head">
-              <h2>Portfolio value over the test</h2>
+              <h2>Portfolio value over the test (latest run of each)</h2>
               <span className="muted small">Each strategy starts with $100,000. SPY is scaled to the same start.</span>
             </div>
             {lines.length ? <EquityChart series={lines} baseline={100_000} /> : <p className="muted">No finished runs for this window yet.</p>}
@@ -86,8 +101,8 @@ export function Overview({ windowKey, setWindowKey }: { windowKey: string; setWi
           </section>
 
           <p className="small muted">
-            Each line is the latest finished run of its kind. AI agents don't answer the same way every time, so one run per mode is a
-            first reading, not proof. Repeat runs to firm it up; every attempt stays in the <a href="#/runs">run log</a>.
+            The Leakage Gap averages every finished AI run of each kind; the chart and table show the latest run of each. AI agents don't
+            answer the same way every time, so repeat runs to firm the numbers up. Every attempt stays in the <a href="#/runs">run log</a>.
           </p>
         </>
       )}
@@ -96,25 +111,27 @@ export function Overview({ windowKey, setWindowKey }: { windowKey: string; setWi
 }
 
 function GapBars({ data }: { data: OverviewData }) {
-  const get = (k: string) => data.series.find((s) => s.key === k);
-  const rows = [
-    { s: get("normal"), label: "Real names and dates", color: "var(--s1)" },
-    { s: get("blind"), label: "Blind, with posts", color: "var(--s2)" },
-    { s: get("blindPricesOnly"), label: "Blind, prices only", color: "var(--s3)" },
-    { s: get("spy"), label: "S&P 500 (SPY)", color: "var(--s-bench)" },
-  ].filter((r) => r.s) as { s: Series; label: string; color: string }[];
-  const ret = (s: Series) => s.points.at(-1)!.value / 100_000 - 1;
-  const max = Math.max(0.05, ...rows.map((r) => Math.abs(ret(r.s))));
+  const spy = data.series.find((s) => s.key === "spy");
+  const avg = (n: number) => (n === 1 ? "1 run" : `average of ${n} runs`);
+  const rows: { key: string; label: string; sub: string; r: number; color: string }[] = [];
+  if (data.gap) {
+    rows.push({ key: "n", label: "Real names and dates", sub: avg(data.gap.normal.n), r: data.gap.normal.totalReturn, color: "var(--s1)" });
+    rows.push({ key: "b", label: "Blind, with posts", sub: avg(data.gap.blind.n), r: data.gap.blind.totalReturn, color: "var(--s2)" });
+  }
+  if (data.gapPricesOnly) {
+    rows.push({ key: "bp", label: "Blind, prices only", sub: avg(data.gapPricesOnly.blind.n), r: data.gapPricesOnly.blind.totalReturn, color: "var(--s3)" });
+  }
+  if (spy) rows.push({ key: "spy", label: "S&P 500 (SPY)", sub: "benchmark", r: spy.points.at(-1)!.value / 100_000 - 1, color: "var(--s-bench)" });
+  const max = Math.max(0.05, ...rows.map((x) => Math.abs(x.r)));
   const zero = 50; // percent across the track
 
   return (
     <div className="gap-compare" aria-label="Returns compared">
-      {rows.map(({ s, label, color }) => {
-        const r = ret(s);
+      {rows.map(({ key, label, sub, r, color }) => {
         const w = (Math.abs(r) / max) * 50;
         return (
-          <div className="gap-bar" key={s.key}>
-            <span>{label}</span>
+          <div className="gap-bar" key={key}>
+            <span>{label}<span className="muted small"> · {sub}</span></span>
             <div className="track">
               <div className="zero" style={{ left: `${zero}%` }} />
               <div className="fill" style={{ background: color, left: r >= 0 ? `${zero}%` : `${zero - w}%`, width: `${w}%` }} />
@@ -123,9 +140,15 @@ function GapBars({ data }: { data: OverviewData }) {
           </div>
         );
       })}
+      {data.gap && data.gap.normal.n + data.gap.blind.n > 2 && (
+        <p className="small muted" style={{ margin: 0 }}>
+          Individual runs: real names {data.gap.normal.runs.map((x) => pct(x.totalReturn)).join(", ")}; blind {data.gap.blind.runs.map((x) => pct(x.totalReturn)).join(", ")}.
+          The agent answers differently every time, so more runs give a steadier number.
+        </p>
+      )}
       {data.gapPricesOnly && (
         <p className="small muted" style={{ margin: 0 }}>
-          Against the prices-only blind run the gap is <b className="num">{pts(data.gapPricesOnly.gap)}</b>. Posts can hint at the period
+          Against prices-only blind runs the gap is <b className="num">{pts(data.gapPricesOnly.gap)}</b>. Posts can hint at the period
           even after redaction, so that is the more conservative reading.
         </p>
       )}

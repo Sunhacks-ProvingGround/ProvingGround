@@ -128,7 +128,7 @@ export function NewRun() {
 
             <div className="row">
               <button className="btn" onClick={start} disabled={starting || !!busy}>{busy ? "Running…" : "Start run"}</button>
-              {isAI && <span className="hint">About 4–5 minutes on a free Gemini key (15 requests a minute).</span>}
+              {isAI && <span className="hint">About 5–15 minutes on a free Gemini key (15 requests a minute); faster on a paid key.</span>}
             </div>
             {error && <div className="error">{error}</div>}
           </div>

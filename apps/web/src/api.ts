@@ -61,11 +61,19 @@ export interface RunDetail {
   prices: Record<string, { day: string; close: number }[]>;
   horizonDays: number;
 }
+export interface GapSide {
+  /** Average return over every finished run of this kind. */
+  totalReturn: number;
+  n: number;
+  runs: { runId: string; seq: number; totalReturn: number }[];
+  runId: string;
+  seq: number;
+}
 export interface Gap {
   window: { start: string; end: string };
   model: string | null;
-  normal: { runId: string; seq: number; totalReturn: number };
-  blind: { runId: string; seq: number; totalReturn: number; posts: boolean };
+  normal: GapSide;
+  blind: GapSide & { posts: boolean };
   gap: number;
 }
 export interface Series {
@@ -79,6 +87,10 @@ export interface Overview {
   series: Series[];
   gap: Gap | null;
   gapPricesOnly: Gap | null;
+  /** Gap on the 2026 control window: what the disguise costs with nothing to remember. */
+  controlGap: Gap | null;
+  /** Demo gap minus control gap: the part that comes from memory. */
+  memoryEffect: number | null;
 }
 export interface Meta {
   strategies: { id: string; label: string }[];

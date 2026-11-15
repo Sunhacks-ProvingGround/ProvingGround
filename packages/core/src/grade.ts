@@ -126,43 +126,64 @@ export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Pro
   };
 }
 
+export interface GapSide {
+  /** Average return over every finished run of this kind. */
+  totalReturn: number;
+  /** How many runs the average is over, and each one. */
+  n: number;
+  runs: { runId: string; seq: number; totalReturn: number }[];
+  /** The most recent run of this kind. */
+  runId: string;
+  seq: number;
+}
+
 export interface LeakageGap {
   window: { start: string; end: string };
   model: string | null;
-  normal: { runId: string; seq: number; totalReturn: number };
-  blind: { runId: string; seq: number; totalReturn: number; posts: boolean };
-  /** normal return minus blind return. Positive = the agent did better when it could recognise the period. */
+  normal: GapSide;
+  blind: GapSide & { posts: boolean };
+  /** Average normal return minus average blind return, in fractions (0.05 = 5 points). */
   gap: number;
 }
 
 /**
- * The Leakage Gap for a window: the latest finished AI run in normal mode
- * against the latest finished blind run on the same window. By default both
- * runs saw investor posts (like for like); pass {posts: false} to compare
- * against the prices-only blind run instead.
+ * The Leakage Gap for a window: the average return of every finished AI run
+ * in normal mode minus the average of every finished blind run, same window
+ * and same model. Averaging matters: the model answers differently each time,
+ * so single runs swing a lot. By default both sides saw investor posts (like
+ * for like); pass {posts: false} to compare against prices-only blind runs.
  */
 export async function leakageGap(start: string, end: string, opts: { posts?: boolean } = {}): Promise<LeakageGap | null> {
-  const latest = async (mode: "normal" | "blind", posts?: boolean) => {
+  const runsOf = async (mode: "normal" | "blind", posts: boolean, model: string | null) => {
     const { rows } = await db().query(
       `SELECT id, seq, config, summary FROM runs
         WHERE agent = 'llm' AND status = 'done' AND mode = $1
           AND config->>'start' = $2 AND config->>'end' = $3
-          AND ($4::boolean IS NULL OR coalesce((config->'params'->>'posts')::boolean, true) = $4)
-        ORDER BY seq DESC LIMIT 1`,
-      [mode, start, end, posts ?? null],
+          AND coalesce((config->'params'->>'posts')::boolean, true) = $4
+          AND ($5::text IS NULL OR config->'params'->>'model' = $5)
+        ORDER BY seq DESC`,
+      [mode, start, end, posts, model],
     );
-    return rows[0];
+    return rows;
   };
-  const n = await latest("normal", true);
-  const b = await latest("blind", opts.posts ?? true);
-  if (!n || !b) return null;
-  const nr = Number(n.summary.totalReturn);
-  const br = Number(b.summary.totalReturn);
-  return {
-    window: { start, end },
-    model: n.config?.params?.model ?? null,
-    normal: { runId: n.id, seq: Number(n.seq), totalReturn: nr },
-    blind: { runId: b.id, seq: Number(b.seq), totalReturn: br, posts: b.config?.params?.posts ?? true },
-    gap: nr - br,
+  const side = (rows: any[]): GapSide => {
+    const runs = rows.map((r) => ({ runId: r.id, seq: Number(r.seq), totalReturn: Number(r.summary.totalReturn) }));
+    return {
+      totalReturn: runs.reduce((a, r) => a + r.totalReturn, 0) / runs.length,
+      n: runs.length,
+      runs,
+      runId: runs[0].runId,
+      seq: runs[0].seq,
+    };
   };
+  // Compare like with like: the model of the most recent normal run.
+  const latestNormal = await runsOf("normal", true, null);
+  if (!latestNormal.length) return null;
+  const model: string | null = latestNormal[0].config?.params?.model ?? null;
+  const n = await runsOf("normal", true, model);
+  const b = await runsOf("blind", opts.posts ?? true, model);
+  if (!n.length || !b.length) return null;
+  const normal = side(n);
+  const blind = { ...side(b), posts: opts.posts ?? true };
+  return { window: { start, end }, model, normal, blind, gap: normal.totalReturn - blind.totalReturn };
 }
