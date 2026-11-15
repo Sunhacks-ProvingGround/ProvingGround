@@ -6,6 +6,8 @@
     "db:migrate": "pnpm --filter @pg/core db:migrate",
     "db:load": "pnpm --filter @pg/core db:load",
     "db:check": "pnpm --filter @pg/core db:check",
+    "backtest": "pnpm --filter @pg/core backtest",
+    "runs:verify": "pnpm --filter @pg/core runs:verify",
     "typecheck": "pnpm -r typecheck"
   }
 }

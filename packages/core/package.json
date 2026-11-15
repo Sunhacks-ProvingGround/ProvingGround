@@ -8,6 +8,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:load": "tsx scripts/load-prices.ts",
     "db:check": "tsx scripts/check-no-future.ts",
+    "backtest": "tsx scripts/backtest.ts",
+    "runs:verify": "tsx scripts/verify-runs.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
