@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, modelsApi, type Model, type Run } from "../api";
 import { LiveProgress, useJobEvents } from "../live";
 import { longDate, navigate, pct } from "../format";
+import { Section } from "../section";
 
 const nextDay = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
@@ -181,8 +182,8 @@ export function NewRun({ modelId }: { modelId?: string }) {
       </div>
 
       {selectedModel && tests.length > 0 && (
-        <section className="panel">
-          <div className="panel-head"><h2>Earlier tests of {selectedModel.name}</h2><span className="muted small">{tests.length} run{tests.length === 1 ? "" : "s"}</span></div>
+        <Section id="test-earlier" title={`Earlier tests of ${selectedModel.name}`} subtitle="Each tagged with the model version it ran"
+          meta={`${tests.length} run${tests.length === 1 ? "" : "s"}`}>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Run</th><th>Test period</th><th>Status</th><th className="num">Return</th><th className="num">SPY</th><th>Model version</th></tr></thead>
@@ -200,7 +201,7 @@ export function NewRun({ modelId }: { modelId?: string }) {
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       )}
     </>
   );

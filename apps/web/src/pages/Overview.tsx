@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Overview as OverviewData, type Series } from "../api";
 import { EquityChart, type LineSeries } from "../charts";
+import { Section, ExpandAll } from "../section";
 import { pct, pts, usd, windowLabel, navigate } from "../format";
 
 const SERIES_STYLE: Record<string, { color: string; dashed?: boolean; width?: number }> = {
@@ -68,21 +69,7 @@ export function Overview({ windowKey, setWindowKey }: { windowKey: string; setWi
                 <GapBars data={data} />
               </div>
             ) : null}
-            {g && !isControl && data.controlGap && data.memoryEffect != null ? (
-              <div className="memory">
-                <div>
-                  <div className="gap-label">Memory effect</div>
-                  <div className="num" style={{ fontSize: 30, fontWeight: 600 }}>{pts(data.memoryEffect)}</div>
-                </div>
-                <p className="small" style={{ margin: 0 }}>
-                  The disguise itself costs something: on the 2026 control window, where the model has nothing to remember, the blind
-                  agent still trailed by <b className="num">{pts(data.controlGap.gap)}</b>. Subtracting that from the 2020 gap
-                  (<b className="num">{pts(g.gap)}</b>) leaves the part that comes from recognising the period.
-                </p>
-              </div>
-            ) : null}
             {g ? null : (
-
               <div>
                 <h2>No Leakage Gap yet for this window</h2>
                 <p className="lede">It needs one finished AI run in normal mode and one in blind mode on these dates.</p>
@@ -91,19 +78,39 @@ export function Overview({ windowKey, setWindowKey }: { windowKey: string; setWi
             )}
           </section>
 
-          <section className="panel">
-            <div className="panel-head">
-              <h2>Portfolio value over the test (latest run of each)</h2>
-              <span className="muted small">Each strategy starts with $100,000. SPY is scaled to the same start.</span>
-            </div>
-            {lines.length ? <EquityChart series={lines} baseline={100_000} /> : <p className="muted">No finished runs for this window yet.</p>}
-            <ResultsTable series={data.series} />
-          </section>
+          <ExpandAll />
 
-          <p className="small muted">
-            The Leakage Gap averages every finished AI run of each kind; the chart and table show the latest run of each. AI agents don't
-            answer the same way every time, so repeat runs to firm the numbers up. Every attempt stays in the <a href="#/runs">run log</a>.
-          </p>
+          {g && !isControl && data.controlGap && data.memoryEffect != null && (
+            <Section id="ov-memory" title="Memory effect" subtitle="The part of the gap that comes from recognising the period"
+              meta={pts(data.memoryEffect)}>
+              <div className="memory" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+                <div className="num" style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.03em" }}>{pts(data.memoryEffect)}</div>
+                <p className="small" style={{ margin: 0 }}>
+                  The disguise itself costs something: on the 2026 control window, where the model has nothing to remember, the blind
+                  agent still trailed by <b className="num">{pts(data.controlGap.gap)}</b>. Subtracting that from the 2020 gap
+                  (<b className="num">{pts(g.gap)}</b>) leaves the part that comes from recognising the period.
+                </p>
+              </div>
+            </Section>
+          )}
+
+          <Section id="ov-portfolio" title="Portfolio value over the test" subtitle="Latest run of each strategy, from $100,000. SPY scaled to the same start."
+            meta={`${data.series.length} lines`}>
+            {lines.length ? <EquityChart series={lines} baseline={100_000} /> : <p className="muted" style={{ margin: 0 }}>No finished runs for this window yet.</p>}
+          </Section>
+
+          <Section id="ov-table" title="Results by strategy" subtitle="End value, return and trades for each line on the chart"
+            meta={(() => { const best = [...data.series].sort((x, y) => (y.points.at(-1)?.value ?? 0) - (x.points.at(-1)?.value ?? 0))[0]; return best ? `best: ${best.label}` : undefined; })()}
+            defaultOpen={false}>
+            <ResultsTable series={data.series} />
+          </Section>
+
+          <Section id="ov-notes" title="How to read these numbers" subtitle="Averaging, repeat runs and the run log" defaultOpen={false}>
+            <p className="small" style={{ margin: 0 }}>
+              The Leakage Gap averages every finished AI run of each kind; the chart and table show the latest run of each. AI agents don't
+              answer the same way every time, so repeat runs to firm the numbers up. Every attempt stays in the <a href="#/runs">run log</a>.
+            </p>
+          </Section>
         </>
       )}
     </>

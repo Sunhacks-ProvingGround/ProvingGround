@@ -1,53 +1,59 @@
-/* Layout: Base-style app shell. A quiet left sidebar, then one airy content column (max 1080px).
-   White cards with hairline borders, one blue accent (Base blue), a clean sans for every number. */
+/* Layout: Apple-style app shell. A translucent macOS sidebar, then one content column (max 1080px)
+   of white, borderless cards on Apple's light gray. Every section is a collapsible card.
+   Inter throughout with Apple-like tight tracking; one accent, Apple blue. */
 :root {
   color-scheme: light;
-  --bg: #ffffff;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-2: #f3f4f6;
-  --ink: #0a0b0d;
-  --ink-2: #5b616e;
-  --ink-3: #8a919e;
-  --line: #e7e9ec;
-  --brand: #0052ff;
+  --surface-2: #f5f5f7;
+  --surface-3: #e8e8ed;
+  --ink: #1d1d1f;
+  --ink-2: #6e6e73;
+  --ink-3: #86868b;
+  --line: #e5e5ea;
+  --brand: #0071e3;
   --brand-ink: #ffffff;
-  --accent: #0052ff;
-  --accent-soft: #e8efff;
-  --accent-ink: #0041cc;
-  --focus: #0052ff;
+  --accent: #0071e3;
+  --accent-soft: #e8f1fc;
+  --accent-ink: #0066cc;
+  --focus: #0071e3;
 
-  /* Chart series (validated categorical order; slot 1 is Base blue) */
-  --s1: #0052ff; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
-  --s-bench: #8a919e;
-  /* Status (reserved for grades) */
-  --good: #098551; --good-ink: #067046; --good-bg: #e6f6ee;
-  --bad: #cf202f; --bad-ink: #b31b28; --bad-bg: #fdecee;
-  --neutral: #8a919e; --neutral-bg: #f3f4f6;
-  --warn-bg: #fff4dc; --warn-ink: #8a5a00;
+  /* Chart series (validated categorical order; slot 1 is Apple blue) */
+  --s1: #0071e3; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --s-bench: #86868b;
+  /* Status (reserved for grades), Apple system green and red */
+  --good: #28a745; --good-ink: #1d7f33; --good-bg: #e8f6ec;
+  --bad: #e30000; --bad-ink: #c4161c; --bad-bg: #fdecec;
+  --neutral: #86868b; --neutral-bg: #f0f0f3;
+  --warn-bg: #fff6e0; --warn-ink: #8a5300;
 
-  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
-  --radius: 16px;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --radius: 18px;
   --radius-sm: 12px;
   --sidebar: 248px;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 12px rgb(0 0 0 / 0.03);
+  --btn: #0071e3; --btn-hover: #0077ed;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0a0b0d; --surface: #141519; --surface-2: #1e2025; --ink: #f5f6f7; --ink-2: #a5abb6; --ink-3: #7b818c;
-    --line: #26282d; --brand: #578bfa; --brand-ink: #0a0b0d; --accent: #578bfa; --accent-soft: #14213d; --accent-ink: #8cb0ff; --focus: #8cb0ff;
-    --s1: #578bfa; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-bench: #7b818c;
-    --good: #27ad75; --good-ink: #4cc38a; --good-bg: #10261c; --bad: #f0616d; --bad-ink: #f5838c; --bad-bg: #2d1518;
-    --neutral: #7b818c; --neutral-bg: #1e2025; --warn-bg: #2e2412; --warn-ink: #f2c66b;
+    --bg: #000000; --surface: #1c1c1e; --surface-2: #2c2c2e; --surface-3: #3a3a3c; --ink: #f5f5f7; --ink-2: #a1a1a6; --ink-3: #8e8e93;
+    --line: #38383a; --brand: #2997ff; --brand-ink: #000000; --accent: #2997ff; --accent-soft: #0b2440; --accent-ink: #6cb6ff; --focus: #6cb6ff;
+    --s1: #2997ff; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-bench: #8e8e93;
+    --good: #30d158; --good-ink: #4cd67a; --good-bg: #0f2a18; --bad: #ff453a; --bad-ink: #ff6961; --bad-bg: #2f1412;
+    --neutral: #8e8e93; --neutral-bg: #2c2c2e; --warn-bg: #2e2412; --warn-ink: #ffd60a;
+    --shadow: none; --btn: #0071e3; --btn-hover: #0077ed;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0a0b0d; --surface: #141519; --surface-2: #1e2025; --ink: #f5f6f7; --ink-2: #a5abb6; --ink-3: #7b818c;
-  --line: #26282d; --brand: #578bfa; --brand-ink: #0a0b0d; --accent: #578bfa; --accent-soft: #14213d; --accent-ink: #8cb0ff; --focus: #8cb0ff;
-  --s1: #578bfa; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-bench: #7b818c;
-  --good: #27ad75; --good-ink: #4cc38a; --good-bg: #10261c; --bad: #f0616d; --bad-ink: #f5838c; --bad-bg: #2d1518;
-  --neutral: #7b818c; --neutral-bg: #1e2025; --warn-bg: #2e2412; --warn-ink: #f2c66b;
+  --bg: #000000; --surface: #1c1c1e; --surface-2: #2c2c2e; --surface-3: #3a3a3c; --ink: #f5f5f7; --ink-2: #a1a1a6; --ink-3: #8e8e93;
+  --line: #38383a; --brand: #2997ff; --brand-ink: #000000; --accent: #2997ff; --accent-soft: #0b2440; --accent-ink: #6cb6ff; --focus: #6cb6ff;
+  --s1: #2997ff; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s-bench: #8e8e93;
+  --good: #30d158; --good-ink: #4cd67a; --good-bg: #0f2a18; --bad: #ff453a; --bad-ink: #ff6961; --bad-bg: #2f1412;
+  --neutral: #8e8e93; --neutral-bg: #2c2c2e; --warn-bg: #2e2412; --warn-ink: #ffd60a;
+  --shadow: none; --btn: #0071e3; --btn-hover: #0077ed;
 }
 
 * { box-sizing: border-box; }
@@ -404,9 +410,6 @@ tr.clickable:hover td { background: var(--surface-2); }
 .progress > i { border-radius: 999px; }
 
 /* Primary buttons keep the deep Base blue in both themes, so white text stays readable */
-:root { --btn: #0052ff; --btn-hover: #0045d6; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --btn: #2c63f0; --btn-hover: #3d72f5; } }
-:root[data-theme="dark"] { --btn: #2c63f0; --btn-hover: #3d72f5; }
 .btn, .cta-bar .btn { background: var(--btn); }
 .btn:hover:not(:disabled) { filter: none; background: var(--btn-hover); }
 .btn.secondary { background: var(--surface-2); }
@@ -431,3 +434,70 @@ tr.clickable:hover td { background: var(--surface-2); }
 .title-input { flex: 1 1 0; width: 0; min-width: 0; }
 .btn { color: #fff; }
 .btn.secondary, .btn.secondary:hover:not(:disabled) { color: var(--ink); }
+
+
+/* ======================================================================
+   Apple layer: typography, sidebar, cards, and collapsible sections.
+   ====================================================================== */
+body { font-size: 15px; line-height: 1.47; letter-spacing: -0.011em; font-feature-settings: "cv11", "ss03"; }
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.028em; line-height: 1.12; }
+h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.012em; }
+.lede { font-size: 17px; line-height: 1.47; color: var(--ink-2); letter-spacing: -0.016em; }
+.small { font-size: 13px; letter-spacing: -0.006em; }
+a { color: var(--accent-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Translucent macOS-style sidebar */
+.sidebar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-right: 1px solid var(--line); }
+.side-nav a { border-radius: 8px; padding: 8px 10px; font-size: 14px; color: var(--ink); }
+.side-nav a svg { color: var(--accent); width: 18px; height: 18px; }
+.side-nav a:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.side-nav a[aria-current="page"] { background: color-mix(in srgb, var(--ink) 9%, transparent); font-weight: 600; }
+.logo { background: var(--ink); color: var(--bg); border-radius: 8px; }
+.side-card { background: var(--surface); box-shadow: var(--shadow); }
+
+/* Cards: white, borderless, soft shadow */
+.panel, .stat, .step, .chart-card, .model-summary, .kpi { border: 0; box-shadow: var(--shadow); background: var(--surface); }
+.chart-card { box-shadow: none; background: var(--surface-2); }
+.panel { border-radius: var(--radius); }
+
+/* Buttons: Apple pill */
+.btn { border-radius: 980px; font-weight: 500; font-size: 15px; letter-spacing: -0.01em; padding: 9px 18px; background: var(--btn); color: #fff; }
+.btn:hover:not(:disabled) { background: var(--btn-hover); }
+.btn.secondary { background: var(--surface-3); color: var(--ink); }
+.btn.secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-3) 80%, var(--ink-3)); }
+
+/* Segmented control and chips */
+.seg { background: var(--surface-3); }
+.chip { background: var(--surface-2); }
+.chip[aria-pressed="true"] { background: var(--accent); color: #fff; box-shadow: none; }
+.chip[aria-pressed="true"] b, .chip[aria-pressed="true"] span { color: #fff; }
+
+/* Big numbers */
+.stat .v, .kpi-value { letter-spacing: -0.03em; }
+.gap-number { letter-spacing: -0.045em; font-weight: 700; }
+
+/* ---------- Collapsible sections ---------- */
+.section { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.section-head { width: 100%; display: flex; align-items: center; gap: 14px; padding: 18px 22px; background: none; border: 0; text-align: left; cursor: pointer; color: var(--ink); border-radius: var(--radius); }
+.section-head:hover { background: color-mix(in srgb, var(--ink) 2.5%, transparent); }
+.section-titles { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.section-title { font-size: 17px; font-weight: 600; letter-spacing: -0.022em; }
+.section-sub { font-size: 13px; color: var(--ink-2); }
+.section-meta { font-size: 14px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chevron { width: 20px; height: 20px; color: var(--ink-3); flex: none; transition: transform 0.2s ease; }
+.section.open .chevron { transform: rotate(180deg); }
+.section.open .section-head { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.section-body { padding: 4px 22px 22px; display: grid; gap: 16px; }
+.section-body.flush { padding: 0 8px 12px; }
+.section-body > .panel { box-shadow: none; padding: 0; }
+@media (max-width: 600px) {
+  .section-head { padding: 16px; flex-wrap: wrap; }
+  .section-meta { order: 3; width: 100%; white-space: normal; }
+  .section-body { padding: 4px 16px 18px; }
+}
+.expand-all { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 13px; color: var(--ink-3); margin-bottom: -16px; }
+.expand-all button { background: none; border: 0; color: var(--accent-ink); cursor: pointer; padding: 2px 0; font-size: 13px; }
+.expand-all button:hover { text-decoration: underline; }
+.page-intro { display: grid; gap: 6px; }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { Section } from "../section";
 
 const WINDOWS = {
   demo: { min: "2020-01-24", max: "2020-04-20", start: "2020-03-16" },
@@ -38,14 +39,12 @@ export function Preview() {
       </section>
       {error && <div className="error">{error}</div>}
       <div className="grid-2">
-        <section className="panel">
-          <div className="panel-head"><h2>Normal mode</h2><span className="tag">real names and dates</span></div>
+        <Section id="preview-normal" title="Normal mode" subtitle="Real names, dates and prices" meta={data ? `${data.normal.split("\n").length} lines` : undefined}>
           <pre className="briefing">{data?.normal ?? "Loading…"}</pre>
-        </section>
-        <section className="panel">
-          <div className="panel-head"><h2>Blind mode</h2><span className="tag">disguised</span></div>
+        </Section>
+        <Section id="preview-blind" title="Blind mode" subtitle="The same information in disguise" meta={data ? `${data.blind.split("\n").length} lines` : undefined}>
           <pre className="briefing">{data?.blind ?? "Loading…"}</pre>
-        </section>
+        </Section>
       </div>
     </>
   );

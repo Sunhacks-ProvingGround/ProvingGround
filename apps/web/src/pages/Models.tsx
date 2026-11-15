@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { modelsApi, type Model } from "../api";
 import { navigate, pct, longDate } from "../format";
+import { Section, ExpandAll } from "../section";
 
 export function Models() {
   const [models, setModels] = useState<Model[] | null>(null);
@@ -20,14 +21,18 @@ export function Models() {
         <button className="btn" onClick={() => navigate("#/model/new")}>New model</button>
       </section>
 
-      <section className="steps">
+      <ExpandAll />
+      <Section id="models-how" title="How it works" subtitle="Build, train, then test on dates the model has never seen" meta="3 steps" defaultOpen={!models || models.length === 0}>
+      <div className="steps">
         <div className="step"><b>1. Build</b><span>Pick tickers and a training period. Write JavaScript with <span className="mono">train()</span> and <span className="mono">decide()</span>, or describe a strategy in plain English for Gemini.</span></div>
         <div className="step"><b>2. Train</b><span>Your code learns from the training period only; the database refuses anything later. Prompt models do a graded practice run and keep the lessons.</span></div>
         <div className="step"><b>3. Test</b><span>Run it on a later period with a $100,000 portfolio. Registered in the run log first, graded trade by trade afterwards.</span></div>
-      </section>
+      </div>
+      </Section>
 
       {error && <div className="error">{error}</div>}
-      <section className="panel">
+      <Section id="models-list" title="All models" subtitle="Click a model to open it"
+        meta={models ? `${models.length} model${models.length === 1 ? "" : "s"} · ${models.filter((m) => m.status === "trained").length} trained` : undefined}>
         {!models ? <p className="muted">Loading…</p> : !models.length ? (
           <div>
             <h2>No models yet</h2>
@@ -54,7 +59,7 @@ export function Models() {
             </table>
           </div>
         )}
-      </section>
+      </Section>
     </>
   );
 }

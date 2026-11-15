@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Run } from "../api";
 import { agentLabel, pct, navigate, shortDate } from "../format";
+import { Section, ExpandAll } from "../section";
 
 export function Runs() {
   const [runs, setRuns] = useState<Run[] | null>(null);
@@ -22,23 +23,17 @@ export function Runs() {
         </p>
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Integrity check</h2>
-          {check ? (
-            check.ok
-              ? <span className="pill done">✓ Chain intact · {check.runs} runs verified</span>
-              : <span className="pill failed">✗ {check.problems.length} problem{check.problems.length === 1 ? "" : "s"}</span>
-          ) : <span className="muted small">Checking…</span>}
-        </div>
-        {check && !check.ok && <ul className="small">{check.problems.map((p) => <li key={p}>{p}</li>)}</ul>}
-        <p className="small muted" style={{ margin: 0 }}>
-          Recomputes every settings hash and every results seal from what is stored right now.
-        </p>
-      </section>
+      <ExpandAll />
+      <Section id="runs-integrity" title="Integrity check" subtitle="Recomputes every settings hash and results seal from what is stored right now"
+        meta={check ? (check.ok ? `✓ Chain intact · ${check.runs} runs` : `✗ ${check.problems.length} problem${check.problems.length === 1 ? "" : "s"}`) : "checking…"}
+        defaultOpen={!!check && !check.ok}>
+        {check && !check.ok ? <ul className="small" style={{ margin: 0 }}>{check.problems.map((p) => <li key={p}>{p}</li>)}</ul>
+          : <p className="small" style={{ margin: 0 }}>Every run chains onto the one before it, its settings still match the hash registered before it ran, and its saved results still match their seal.</p>}
+      </Section>
 
       {error && <div className="error">{error}</div>}
-      <section className="panel">
+      <Section id="runs-all" title="All runs" subtitle="Every test ever started, newest first. Click one for its report card."
+        meta={runs ? `${runs.length} run${runs.length === 1 ? "" : "s"}` : undefined}>
         <div className="table-wrap">
           <table>
             <thead>
@@ -62,7 +57,7 @@ export function Runs() {
           </table>
         </div>
         {!runs && !error && <p className="muted">Loading…</p>}
-      </section>
+      </Section>
     </>
   );
 }

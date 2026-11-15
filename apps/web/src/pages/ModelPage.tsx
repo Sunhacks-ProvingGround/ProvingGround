@@ -3,6 +3,7 @@ import { modelsApi, type Model, type ModelInput, type Templates, type TickerInfo
 import { EquityChart } from "../charts";
 import { LiveProgress, useJobEvents } from "../live";
 import { ModelEvaluation } from "../evaluation";
+import { Section, ExpandAll } from "../section";
 import { longDate, navigate, pct, usd } from "../format";
 
 const DEFAULT: ModelInput = {
@@ -144,11 +145,9 @@ function Setup({ form, setForm, tickers, tpl, showFormat, setShowFormat }: {
 
   return (
     <>
-      <section className="panel">
-        <div className="card-head">
-          <div><h2>Data</h2><p className="card-sub">The stocks your model trades and the period it learns from.</p></div>
-          <span className="counter">{form.tickers.length} / 8 tickers</span>
-        </div>
+      <ExpandAll />
+      <Section id="setup-data" title="Data" subtitle="The stocks your model trades and the period it learns from"
+        meta={`${form.tickers.length} / 8 tickers · ${monthYear(form.trainStart)} – ${monthYear(form.trainEnd)}`}>
         {groups.map(([label, list]) => (
           <div key={label} className="ticker-group">
             <span className="group-label">{label}</span>
@@ -175,35 +174,32 @@ function Setup({ form, setForm, tickers, tpl, showFormat, setShowFormat }: {
             </div>
           )}
         </div>
-        {latestStart && <p className="hint" style={{ margin: "10px 0 0" }}>All selected tickers have data from {longDate(latestStart)}. Tests run on dates after training ends.</p>}
-      </section>
+        {latestStart && <p className="hint" style={{ margin: 0 }}>All selected tickers have data from {longDate(latestStart)}. Tests run on dates after training ends.</p>}
+      </Section>
 
-      <section className="panel">
-        <div className="card-head">
-          <div><h2>Model</h2><p className="card-sub">{form.kind === "code" ? "JavaScript with train() and decide(). Runs in a sandbox." : "Your strategy in plain English. Gemini trades it day by day."}</p></div>
+      <Section id="setup-model" title="Model"
+        subtitle={form.kind === "code" ? "JavaScript with train() and decide(). Runs in a sandbox." : "Your strategy in plain English. Gemini trades it day by day."}
+        meta={form.kind === "code" ? `Code · ${(form.code ?? "").split("\n").length} lines` : `Prompt · ${(form.prompt ?? "").trim().split(/\s+/).filter(Boolean).length} words`}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
           <div className="seg" role="group" aria-label="Model type">
             <button type="button" aria-pressed={form.kind === "code"} onClick={() => setForm({ ...form, kind: "code" })}>Code</button>
             <button type="button" aria-pressed={form.kind === "prompt"} onClick={() => setForm({ ...form, kind: "prompt", prompt: form.prompt || tpl?.promptExample || "" })}>Prompt</button>
           </div>
+          {form.kind === "code" && (
+            <select id="template" aria-label="Start from a template" defaultValue="" onChange={(e) => {
+              const t = tpl?.code.find((x) => x.id === e.target.value);
+              if (t) setForm({ ...form, code: t.code, name: form.name || t.name });
+              e.target.value = "";
+            }}>
+              <option value="" disabled>Load a template…</option>
+              {tpl?.code.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
         </div>
         {form.kind === "code" ? (
           <>
-            {tpl && !tpl.customCode && <div className="note" style={{ marginBottom: 10 }}>Custom code is turned off on this server.</div>}
-            <div className="editor-toolbar">
-              <select id="template" aria-label="Start from a template" defaultValue="" onChange={(e) => {
-                const t = tpl?.code.find((x) => x.id === e.target.value);
-                if (t) setForm({ ...form, code: t.code, name: form.name || t.name });
-                e.target.value = "";
-              }}>
-                <option value="" disabled>Load a template…</option>
-                {tpl?.code.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-              <span className="hint">Replaces the code below.</span>
-              <button type="button" className="btn secondary small-btn" aria-pressed={showFormat} onClick={() => setShowFormat(!showFormat)}>
-                {showFormat ? "Hide format" : "Input and output format"}
-              </button>
-            </div>
-            <div className={`editor-wrap ${showFormat ? "with-doc" : ""}`}>
+            {tpl && !tpl.customCode && <div className="note">Custom code is turned off on this server.</div>}
+            <div className="editor-wrap">
               <textarea id="code" className="code" spellCheck={false} value={form.code} aria-label="Model code"
                 onChange={(e) => setForm({ ...form, code: e.target.value })}
                 onKeyDown={(e) => {
@@ -213,18 +209,24 @@ function Setup({ form, setForm, tickers, tpl, showFormat, setShowFormat }: {
                   setForm({ ...form, code: el.value.slice(0, s) + "  " + el.value.slice(end) });
                   requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = s + 2; });
                 }} />
-              {showFormat && <pre className="format-doc">{tpl?.formatDoc}</pre>}
             </div>
           </>
         ) : (
           <>
             <textarea id="prompt" className="code prose" value={form.prompt} aria-label="Strategy prompt" onChange={(e) => setForm({ ...form, prompt: e.target.value })} />
-            <p className="hint" style={{ margin: "8px 0 0" }}>
+            <p className="hint" style={{ margin: 0 }}>
               Training is a graded practice run on the last {tpl?.practiceDays ?? 30} trading days of the training period; Gemini turns the mistakes into lessons the model keeps.
             </p>
           </>
         )}
-      </section>
+      </Section>
+
+      {form.kind === "code" && (
+        <Section id="setup-format" title="Input and output format" subtitle="What train() and decide() receive and must return, plus the helpers you can use"
+          meta="train() · decide() · pg helpers" defaultOpen={false}>
+          <pre className="format-doc" style={{ maxHeight: "none" }}>{tpl?.formatDoc}</pre>
+        </Section>
+      )}
     </>
   );
 }
@@ -262,26 +264,25 @@ function Results({ model, trainJob, train, training, dirty, canTest, onTrain }: 
   return (
     <>
       {dirty && <div className="note">You've edited the model since this training. These results are for the previous version; train again to update them.</div>}
-      <section className="panel">
-        {ev ? <ModelEvaluation ev={ev} curve={curve} name={model.name} /> : (
+      {ev ? <ModelEvaluation ev={ev} curve={curve} name={model.name} /> : (
+        <section className="panel">
           <EquityChart baseline={curve[0]?.model} series={[
             { key: "model", label: model.name, color: "var(--s1)", width: 2.5, points: curve.map((p) => ({ day: p.day, value: p.model })) },
             { key: "bh", label: "Buy and hold, same tickers", color: "var(--s-bench)", dashed: true, points: curve.filter((p) => p.buyHold != null).map((p) => ({ day: p.day, value: p.buyHold! })) },
           ]} />
-        )}
-      </section>
-
-      {model.lessons && (
-        <section className="panel">
-          <h2>Lessons it carries into tests</h2>
-          <ul className="lessons">{model.lessons.split("\n").map((l) => l.replace(/^-\s*/, "")).filter(Boolean).map((l) => <li key={l}>{l}</li>)}</ul>
         </section>
       )}
 
-      <section className="panel">
-        <details>
-          <summary>Training details</summary>
-          <div className="details-body">
+      {model.lessons && (
+        <Section id="train-lessons" title="Lessons it carries into tests" subtitle="Written from the practice run's mistakes"
+          meta={`${model.lessons.split("\n").filter((l) => l.trim()).length} lessons`}>
+          <ul className="lessons" style={{ margin: 0 }}>{model.lessons.split("\n").map((l) => l.replace(/^-\s*/, "")).filter(Boolean).map((l) => <li key={l}>{l}</li>)}</ul>
+        </Section>
+      )}
+
+      <Section id="train-details" title="Training details" subtitle="Trades, version, and anything your code printed"
+        meta={`${m.trades} trades · version ${model.versionHash?.slice(0, 8) ?? "–"}`} defaultOpen={false}>
+          <div className="details-body" style={{ marginTop: 0 }}>
             <div className="row small">
               <span className="tag">{model.kind === "code" ? `${m.trainDays} trading days` : `practice from ${longDate(m.practiceFrom!)}`}</span>
               <span className="tag">{m.trades} trades</span>
@@ -298,8 +299,7 @@ function Results({ model, trainJob, train, training, dirty, canTest, onTrain }: 
             )}
             {!!model.logs?.length && <pre className="briefing">{model.logs.join("\n")}</pre>}
           </div>
-        </details>
-      </section>
+      </Section>
 
       <section className="cta-bar">
         <div>

@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type RunDetail as Detail, type Trade, type RunReview } from "../api";
 import { EquityChart, PriceWithTrades, TradeLegend, GradePill } from "../charts";
+import { Section, ExpandAll } from "../section";
 import { agentLabel, pct, usd, shortDate, windowLabel } from "../format";
 
 type Filter = "all" | "good" | "bad" | "neutral";
+/** Trades shown before "Show all". */
+const ROWS = 12;
 
 export function RunDetail({ id }: { id: string }) {
   const [d, setD] = useState<Detail | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     setD(null);
@@ -35,12 +39,13 @@ export function RunDetail({ id }: { id: string }) {
   const shown = trades.filter((t) => filter === "all" || t.grade === filter);
   const biggest = [...trades].filter((t) => t.edgeDollars != null).sort((a, b) => Math.abs(b.edgeDollars!) - Math.abs(a.edgeDollars!)).slice(0, 3);
 
+  const signedPct = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}%`;
   return (
     <>
-      <section>
+      <section className="page-intro">
         <div className="row small muted"><a href="#/runs">Run log</a><span>/</span><span>Run #{run.position}</span></div>
-        <h1 style={{ marginTop: 6 }}>{agentLabel(run)}</h1>
-        <p className="lede">
+        <h1>{agentLabel(run)}</h1>
+        <p className="lede" style={{ margin: 0 }}>
           {run.agent === "model" && run.modelId && <><a href={`#/model/${run.modelId}`}>Model page</a> · </>}
           <span className="mono">{run.tickers?.join(" ")}</span> · {windowLabel(run.start, run.end)}
           {run.model && <> · <span className="mono">{run.model}</span></>}
@@ -60,22 +65,28 @@ export function RunDetail({ id }: { id: string }) {
         </section>
       )}
 
-      {review && <MissedPanel review={review} />}
+      <ExpandAll />
+
+      {review && (
+        <Section id="run-missed" title="What the model missed" subtitle="Judged on the days after each decision, which the model could not see"
+          meta={`${signedPct(review.totalReturn - review.buyHoldReturn)} vs buy and hold`}>
+          <MissedPanel review={review} />
+        </Section>
+      )}
 
       {trades.length > 0 && (
-        <section className="panel">
-          <h2>The short version</h2>
-          <p style={{ margin: "8px 0 0" }}>
+        <Section id="run-short" title="The short version" meta={`${usd(counts.goodDollars + counts.badDollars, true)} net from trading`}>
+          <p style={{ margin: 0 }}>
             {counts.good} good trades added <b className="num">{usd(counts.goodDollars, true)}</b> compared with not trading;
             {" "}{counts.bad} bad trades cost <b className="num">{usd(counts.badDollars, true)}</b>.
             {biggest.length > 0 && <> The trade that mattered most: <b>{biggest[0].side} {biggest[0].ticker} on {shortDate(biggest[0].filledOn)}</b> ({biggest[0].grade}, {usd(biggest[0].edgeDollars, true)}).</>}
           </p>
-        </section>
+        </Section>
       )}
 
       {days.length > 0 && (
-        <section className="panel">
-          <div className="panel-head"><h2>Portfolio value</h2><span className="muted small">vs the S&P 500 (SPY) from the same start</span></div>
+        <Section id="run-portfolio" title="Portfolio value" subtitle="Against the S&P 500 (SPY) from the same start"
+          meta={s?.totalReturn != null ? `${pct(s.totalReturn)} · SPY ${pct(s.benchmarkReturn)}` : undefined}>
           <EquityChart
             baseline={100_000}
             series={[
@@ -83,79 +94,78 @@ export function RunDetail({ id }: { id: string }) {
               ...(spy.length ? [{ key: "spy", label: "S&P 500 (SPY)", color: "var(--s-bench)", dashed: true, points: spy.map((p) => ({ day: p.day, value: (100_000 * p.close) / spy[0].close })) }] : []),
             ]}
           />
-        </section>
+        </Section>
       )}
 
       {trades.length > 0 && (
-        <section className="grid-2">
-          {tickers.map((t) => (
-            <div className="panel" key={t}>
-              <div className="panel-head"><h2>{t}</h2><span className="muted small">{trades.filter((x) => x.ticker === t).length} trades</span></div>
-              <PriceWithTrades ticker={t} prices={prices[t]} trades={trades} />
-              <TradeLegend />
-            </div>
-          ))}
-        </section>
-      )}
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>Report card</h2>
-            <p className="small muted" style={{ margin: "4px 0 0" }}>
-              Each trade judged on the {d.horizonDays} trading days after it filled: a buy against holding cash, a sell against holding on.
-              More than 1% either way counts as good or bad.
-            </p>
-          </div>
-          <div className="seg" role="group" aria-label="Show trades">
-            {(["all", "good", "bad", "neutral"] as Filter[]).map((f) => (
-              <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
-                {f === "all" ? `All ${trades.length}` : f === "neutral" ? `Even ${counts.neutral}` : `${f[0].toUpperCase()}${f.slice(1)} ${counts[f]}`}
-              </button>
+        <Section id="run-prices" title="Prices and trades" subtitle="Every trade on the day it filled, colored by its grade"
+          meta={`${tickers.length} ticker${tickers.length === 1 ? "" : "s"}`} defaultOpen={false}>
+          <div className="grid-2">
+            {tickers.map((t) => (
+              <div key={t} className="chart-card">
+                <div className="panel-head"><h3>{t}</h3><span className="muted small">{trades.filter((x) => x.ticker === t).length} trades</span></div>
+                <PriceWithTrades ticker={t} prices={prices[t]} trades={trades} />
+                <TradeLegend />
+              </div>
             ))}
           </div>
-        </div>
-        {trades.length === 0 ? <p className="muted">This run made no trades.</p> : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Filled</th><th>Trade</th><th>Grade</th><th className="num">vs not trading</th><th>What happened, and why it traded</th></tr>
-              </thead>
-              <tbody>
-                {shown.map((t) => <TradeRow t={t} key={t.id} />)}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {decisions.length > 0 && (
-        <section className="panel">
-          <details>
-            <summary>Every daily decision ({decisions.length})</summary>
-            <div className="feed" style={{ maxHeight: 480, marginTop: 12 }}>
-              {decisions.map((x) => (
-                <div className="feed-item" key={x.day}>
-                  <span className="d">{shortDate(x.day)}{x.shownAs.startsWith("Day") ? <><br />{x.shownAs}</> : null}</span>
-                  <span>
-                    <span className="mono small">{Object.entries(x.targets).map(([k, w]) => `${k} ${Math.round(w * 100)}%`).join(" · ")}</span>
-                    <br />{x.error ? <span style={{ color: "var(--bad-ink)" }}>No decision: {x.error}</span> : x.reason}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </details>
-        </section>
+        </Section>
       )}
 
-      <section className="panel">
-        <h2>Proof</h2>
-        <div className="small" style={{ display: "grid", gap: 6, marginTop: 10 }}>
+      <Section id="run-report" title="Report card" subtitle={`Each trade judged on the ${d.horizonDays} trading days after it filled. More than 1% either way counts as good or bad.`}
+        meta={trades.length ? `${counts.good} good · ${counts.bad} bad · ${counts.neutral} even` : "no trades"}>
+        {trades.length === 0 ? <p className="muted" style={{ margin: 0 }}>This run made no trades.</p> : (
+          <>
+            <div className="seg" role="group" aria-label="Show trades" style={{ justifySelf: "start" }}>
+              {(["all", "good", "bad", "neutral"] as Filter[]).map((f) => (
+                <button key={f} aria-pressed={filter === f} onClick={() => setFilter(f)}>
+                  {f === "all" ? `All ${trades.length}` : f === "neutral" ? `Even ${counts.neutral}` : `${f[0].toUpperCase()}${f.slice(1)} ${counts[f]}`}
+                </button>
+              ))}
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Filled</th><th>Trade</th><th>Grade</th><th className="num">vs not trading</th><th>What happened, and why it traded</th></tr>
+                </thead>
+                <tbody>
+                  {(showAll ? shown : shown.slice(0, ROWS)).map((t) => <TradeRow t={t} key={t.id} />)}
+                </tbody>
+              </table>
+            </div>
+            {shown.length > ROWS && (
+              <button type="button" className="btn secondary" style={{ justifySelf: "center" }} onClick={() => setShowAll(!showAll)}>
+                {showAll ? "Show fewer" : `Show all ${shown.length} trades`}
+              </button>
+            )}
+          </>
+        )}
+      </Section>
+
+      {decisions.length > 0 && (
+        <Section id="run-decisions" title="Every daily decision" subtitle="What the agent chose after each close, and why" meta={`${decisions.length} days`} defaultOpen={false}>
+          <div className="feed" style={{ maxHeight: 480 }}>
+            {decisions.map((x) => (
+              <div className="feed-item" key={x.day}>
+                <span className="d">{shortDate(x.day)}{x.shownAs.startsWith("Day") ? <><br />{x.shownAs}</> : null}</span>
+                <span>
+                  <span className="mono small">{Object.entries(x.targets).map(([k, w]) => `${k} ${Math.round(w * 100)}%`).join(" · ")}</span>
+                  <br />{x.error ? <span style={{ color: "var(--bad-ink)" }}>No decision: {x.error}</span> : x.reason}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      <Section id="run-proof" title="Proof" subtitle="Hashes that show this run was registered before it ran and hasn't changed since"
+        meta={run.resultHash ? "sealed" : "not sealed"} defaultOpen={false}>
+        <div className="small" style={{ display: "grid", gap: 6 }}>
           <div>Settings hash (registered before the run): <span className="hash">{run.hash}</span></div>
           <div>Previous run's hash: <span className="hash">{run.prevHash}</span></div>
           <div>Results seal: <span className="hash">{run.resultHash ?? "not sealed"}</span></div>
         </div>
-      </section>
+      </Section>
     </>
   );
 }
@@ -188,13 +198,9 @@ function TradeRow({ t }: { t: Trade }) {
 function MissedPanel({ review }: { review: RunReview }) {
   const r = review;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>What the model missed</h2>
-        <span className="muted small">Judged on the days after each decision, which the model could not see</span>
-      </div>
-      <p style={{ margin: "0 0 14px" }}>{r.summary}</p>
-      <div className="stats" style={{ marginBottom: 16 }}>
+    <div style={{ display: "grid", gap: 16 }}>
+      <p style={{ margin: 0, fontSize: 16 }}>{r.summary}</p>
+      <div className="stats">
         <Stat k="Model" v={pct(r.totalReturn)} />
         <Stat k="Buy and hold, same tickers" v={pct(r.buyHoldReturn)} />
         <Stat k="Difference" v={pct(r.totalReturn - r.buyHoldReturn)} />
@@ -212,6 +218,6 @@ function MissedPanel({ review }: { review: RunReview }) {
         {r.missed.length > 0 && <div><h3>What it missed</h3><ul className="small">{r.missed.map((x) => <li key={x}>{x}</li>)}</ul></div>}
         {r.tryNext.length > 0 && <div><h3>Try next</h3><ul className="small">{r.tryNext.map((x) => <li key={x}>{x}</li>)}</ul></div>}
       </div>
-    </section>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Legend } from "recharts";
 import type { ClassMetrics, Evaluation } from "./api";
 import { EquityChart } from "./charts";
+import { Section, ExpandAll } from "./section";
 import { longDate } from "./format";
 
 const p1 = (x: number | null | undefined) => (x == null ? "–" : `${(x * 100).toFixed(1)}%`);
@@ -19,72 +20,79 @@ export function ModelEvaluation({ ev, curve, name }: {
   const ic = (x: number | null | undefined) => (x == null ? "–" : x.toFixed(3));
   const markers = ev.validationStart ? [{ day: ev.validationStart, label: "held out →" }] : [];
 
+  const held = (x: ClassMetrics | null, g: (m: ClassMetrics) => number | null, fmt: (n: number | null) => string) => (x ? fmt(g(x)) : fmt(g(f)));
   return (
-    <div className="eval">
-      <div className={`eval-hero ${ev.verdict?.level ?? "practice"}`}>
-        <div className="eval-hero-text">
-          <span className="eyebrow">How well it learned</span>
-          <h2>{ev.verdict ? ev.verdict.title : "Practice run scores"}</h2>
-          <p>{ev.verdict ? ev.verdict.detail : "Prompt models aren't fitted to data, so there is no held-out check. These show how its practice decisions lined up with what happened next."}</p>
+    <>
+      <div className="panel">
+        <div className={`eval-hero ${ev.verdict?.level ?? "practice"}`}>
+          <div className="eval-hero-text">
+            <span className="eyebrow">How well it learned</span>
+            <h2>{ev.verdict ? ev.verdict.title : "Practice run scores"}</h2>
+            <p>{ev.verdict ? ev.verdict.detail : "Prompt models aren't fitted to data, so there is no held-out check. These show how its practice decisions lined up with what happened next."}</p>
+          </div>
+          <div className="kpis">
+            <Kpi label="Balanced accuracy" train={p1(f.balancedAccuracy)} held={v ? p1(v.balancedAccuracy) : null} trend={v ? v.balancedAccuracy - f.balancedAccuracy : 0} note="50% = coin flip" />
+            <Kpi label="F1 score" train={p1(f.f1)} held={v ? p1(v.f1) : null} trend={v ? (v.f1 ?? 0) - (f.f1 ?? 0) : 0} note="precision × recall" />
+            <Kpi label="Information coefficient" train={ic(f.ic)} held={v ? ic(v.ic) : null} trend={v ? (v.ic ?? 0) - (f.ic ?? 0) : 0} note="> 0.05 is useful" />
+            <Kpi label="Return vs buy and hold" train={signed(f.totalReturn - f.buyHoldReturn)} held={v ? signed(v.totalReturn - v.buyHoldReturn) : null} trend={v ? (v.totalReturn - v.buyHoldReturn) - (f.totalReturn - f.buyHoldReturn) : 0} note="after fees" />
+          </div>
         </div>
-        <div className="kpis">
-          <Kpi label="Balanced accuracy" train={p1(f.balancedAccuracy)} held={v ? p1(v.balancedAccuracy) : null} trend={v ? v.balancedAccuracy - f.balancedAccuracy : 0} note="50% = coin flip" />
-          <Kpi label="F1 score" train={p1(f.f1)} held={v ? p1(v.f1) : null} trend={v ? (v.f1 ?? 0) - (f.f1 ?? 0) : 0} note="precision × recall" />
-          <Kpi label="Information coefficient" train={ic(f.ic)} held={v ? ic(v.ic) : null} trend={v ? (v.ic ?? 0) - (f.ic ?? 0) : 0} note="> 0.05 is useful" />
-          <Kpi label="Return vs buy and hold" train={signed(f.totalReturn - f.buyHoldReturn)} held={v ? signed(v.totalReturn - v.buyHoldReturn) : null} trend={v ? (v.totalReturn - v.buyHoldReturn) - (f.totalReturn - f.buyHoldReturn) : 0} note="after fees" />
-        </div>
+        <p className="small muted" style={{ margin: "14px 0 0" }}>
+          Each day, holding a stock counts as predicting it rises over the next {ev.horizon} trading days; not holding it predicts it won't.{" "}
+          {hasVal
+            ? <>train() learned from the first {ev.fitDays} trading days; the last {ev.validationDays} (from {longDate(ev.validationStart!)}) were held out.</>
+            : <>Scored on the practice run.</>}
+        </p>
       </div>
 
-      <p className="small muted" style={{ margin: 0 }}>
-        Each day, holding a stock counts as predicting it rises over the next {ev.horizon} trading days; not holding it predicts it won't.{" "}
-        {hasVal
-          ? <>train() learned from the first {ev.fitDays} trading days; the last {ev.validationDays} (from {longDate(ev.validationStart!)}) were held out.</>
-          : <>Scored on the practice run.</>}
-      </p>
+      <ExpandAll />
 
-      <div className="eval-grid">
-        <figure className="chart-card">
-          <figcaption>Classification scores<span>{hasVal ? "training vs held-out" : "practice run"}</span></figcaption>
-          <ScoreBars f={f} v={v} />
-        </figure>
-        <figure className="chart-card">
-          <figcaption>Balanced accuracy over time<span>rolling {hasVal ? 40 : 10} days · dotted = coin flip</span></figcaption>
-          <EquityChart height={230} percent baseline={0.5} domain={[0.3, 0.7]} markers={markers}
-            series={[{ key: "acc", label: "Rolling balanced accuracy", color: "var(--s1)", points: ev.rolling.map((r) => ({ day: r.day, value: r.accuracy })) }]} />
-        </figure>
-        <figure className="chart-card">
-          <figcaption>Confusion matrix<span>{segA.toLowerCase()}</span></figcaption>
-          <Confusion m={f} horizon={ev.horizon} />
-        </figure>
-        {v ? (
+      <Section id="eval-scores" title="Classification scores" subtitle={hasVal ? "Training days vs held-out days, and how skill changed over time" : "Practice run"}
+        meta={`balanced accuracy ${held(v, (m) => m.balancedAccuracy, p1)}`}>
+        <div className="eval-grid">
           <figure className="chart-card">
-            <figcaption>Confusion matrix<span>held-out days</span></figcaption>
-            <Confusion m={v} horizon={ev.horizon} />
+            <figcaption>Scores<span>{hasVal ? "training vs held-out" : "practice run"}</span></figcaption>
+            <ScoreBars f={f} v={v} />
           </figure>
-        ) : (
           <figure className="chart-card">
-            <figcaption>Bigger position, better outcome?<span>avg {ev.horizon}-day return by position size</span></figcaption>
-            <BucketBars ev={ev} />
+            <figcaption>Balanced accuracy over time<span>rolling {hasVal ? 40 : 10} days · dotted = coin flip</span></figcaption>
+            <EquityChart height={230} percent baseline={0.5} domain={[0.3, 0.7]} markers={markers}
+              series={[{ key: "acc", label: "Rolling balanced accuracy", color: "var(--s1)", points: ev.rolling.map((r) => ({ day: r.day, value: r.accuracy })) }]} />
           </figure>
-        )}
-        {v && (
-          <figure className="chart-card">
-            <figcaption>Bigger position, better outcome?<span>avg {ev.horizon}-day return by position size</span></figcaption>
-            <BucketBars ev={ev} />
-          </figure>
-        )}
-        <figure className="chart-card">
-          <figcaption>Portfolio value<span>with fees · dashed = buy and hold</span></figcaption>
-          <EquityChart height={230} baseline={curve[0]?.model} markers={markers}
-            series={[
-              { key: "model", label: name || "Model", color: "var(--s1)", width: 2.5, points: curve.map((p) => ({ day: p.day, value: p.model })) },
-              { key: "bh", label: "Buy and hold, same tickers", color: "var(--s-bench)", dashed: true, points: curve.filter((p) => p.buyHold != null).map((p) => ({ day: p.day, value: p.buyHold! })) },
-            ]} />
-        </figure>
-      </div>
+        </div>
+      </Section>
 
-      <details className="all-metrics">
-        <summary>All metrics</summary>
+      <Section id="eval-portfolio" title="Portfolio value" subtitle="With fees, against buying and holding the same tickers"
+        meta={`${signed(f.totalReturn)} vs ${signed(f.buyHoldReturn)}${v ? ` · held-out ${signed(v.totalReturn)}` : ""}`}>
+        <EquityChart height={280} baseline={curve[0]?.model} markers={markers}
+          series={[
+            { key: "model", label: name || "Model", color: "var(--s1)", width: 2.5, points: curve.map((p) => ({ day: p.day, value: p.model })) },
+            { key: "bh", label: "Buy and hold, same tickers", color: "var(--s-bench)", dashed: true, points: curve.filter((p) => p.buyHold != null).map((p) => ({ day: p.day, value: p.buyHold! })) },
+          ]} />
+      </Section>
+
+      <Section id="eval-confusion" title="Confusion matrices" subtitle="Which calls were right, wrong, missed or avoided"
+        meta={`${(f.n + (v?.n ?? 0)).toLocaleString()} stock-days`} defaultOpen={false}>
+        <div className="eval-grid">
+          <figure className="chart-card">
+            <figcaption>{segA}<span>{f.n.toLocaleString()} stock-days</span></figcaption>
+            <Confusion m={f} horizon={ev.horizon} />
+          </figure>
+          {v && (
+            <figure className="chart-card">
+              <figcaption>Held-out days<span>{v.n.toLocaleString()} stock-days</span></figcaption>
+              <Confusion m={v} horizon={ev.horizon} />
+            </figure>
+          )}
+        </div>
+      </Section>
+
+      <Section id="eval-buckets" title="Bigger position, better outcome?" subtitle={`Average ${ev.horizon}-day return after each decision, by how much of the portfolio was in the stock`}
+        meta={`IC ${held(v, (m) => m.ic, ic)}`} defaultOpen={false}>
+        <BucketBars ev={ev} />
+      </Section>
+
+      <Section id="eval-all" title="All metrics" subtitle="Every number, with what it means" meta={`${hasVal ? 2 : 1} part${hasVal ? "s" : ""} · 10 metrics`} defaultOpen={false}>
         <div className="table-wrap">
           <table>
             <thead>
@@ -108,8 +116,8 @@ export function ModelEvaluation({ ev, curve, name }: {
             </tbody>
           </table>
         </div>
-      </details>
-    </div>
+      </Section>
+    </>
   );
 }
 
