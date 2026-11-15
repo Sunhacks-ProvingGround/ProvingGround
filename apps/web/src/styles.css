@@ -501,3 +501,11 @@ a:hover { text-decoration: underline; }
 .expand-all button { background: none; border: 0; color: var(--accent-ink); cursor: pointer; padding: 2px 0; font-size: 13px; }
 .expand-all button:hover { text-decoration: underline; }
 .page-intro { display: grid; gap: 6px; }
+
+/* Save / Train / Test: sticky bar at the bottom of the Setup tab */
+.action-bar { position: sticky; bottom: max(12px, env(safe-area-inset-bottom, 0px)); z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 14px 12px 20px; border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 0 0 1px var(--line), 0 8px 28px rgb(0 0 0 / 0.10); }
+.action-note { font-size: 14px; color: var(--ink-2); min-width: 0; }
+@media (max-width: 600px) { .action-bar .actions { width: 100%; } .action-bar .actions .btn { flex: 1 1 auto; } }

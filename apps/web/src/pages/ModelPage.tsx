@@ -103,14 +103,6 @@ export function ModelPage({ id }: { id: string }) {
               onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <span className={`pill ${statusClass[status]}`}>{statusLabel[status]}</span>
           </div>
-          <div className="actions">
-            <button className="btn secondary" disabled={saving || training || (!dirty && !!model)} onClick={() => save(false)}>Save</button>
-            <button className="btn secondary" disabled={saving || training} onClick={() => save(true)}>
-              {training ? "Training…" : model?.status === "trained" && !dirty ? "Train again" : "Train"}
-            </button>
-            <button className="btn" disabled={!canTest} title={canTest ? "" : "Train the current version first"}
-              onClick={() => model && navigate(`#/test/${model.id}`)}>Test this model →</button>
-          </div>
         </div>
         <div className="tabs" role="tablist">
           <button role="tab" aria-selected={tab === "setup"} onClick={() => setTab("setup")}>Setup</button>
@@ -124,7 +116,27 @@ export function ModelPage({ id }: { id: string }) {
       {error && <div className="error">{error}</div>}
 
       {tab === "setup" ? (
-        <Setup form={form} setForm={setForm} tickers={tickers} tpl={tpl} showFormat={showFormat} setShowFormat={setShowFormat} />
+        <>
+          <Setup form={form} setForm={setForm} tickers={tickers} tpl={tpl} showFormat={showFormat} setShowFormat={setShowFormat} />
+          <div className="action-bar" role="group" aria-label="Save, train or test">
+            <span className="action-note">
+              {training ? "Training… results will appear in the Training results tab."
+                : !model ? "Set the data and the model, then save or train."
+                : dirty && model.status === "trained" ? "You've made changes. Train to update the results before testing."
+                : dirty ? "You have unsaved changes."
+                : model.status === "trained" ? "Trained · ready to test on dates after training ends."
+                : model.status === "failed" ? "Last training failed. Fix the code above and train again."
+                : "Saved · not trained yet."}
+            </span>
+            <div className="actions">
+              <button className="btn secondary" disabled={saving || training || (!dirty && !!model)} onClick={() => save(false)}>Save</button>
+              <button className={`btn ${canTest ? "secondary" : ""}`} disabled={saving || training} onClick={() => save(true)}>
+                {training ? "Training…" : model?.status === "trained" && !dirty ? "Train again" : "Train"}
+              </button>
+              {canTest && <button className="btn" onClick={() => model && navigate(`#/test/${model.id}`)}>Test this model →</button>}
+            </div>
+          </div>
+        </>
       ) : (
         <Results model={model} trainJob={trainJob} train={train} training={training} dirty={dirty} canTest={canTest} onTrain={() => save(true)} />
       )}
