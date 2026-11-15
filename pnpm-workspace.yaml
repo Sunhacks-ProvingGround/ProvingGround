@@ -1,3 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# pnpm 12 refuses packages published in the last day. Pin this indirect
+# dependency (used by the UI build tools) to a release older than that.
+overrides:
+  electron-to-chromium: 1.5.484
