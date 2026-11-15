@@ -2,10 +2,11 @@
 // Usage:
 //   pnpm report               the latest finished run
 //   pnpm report --run 4       run #4 from the run log
+//   pnpm report --review      also write a one-line AI review of each trade
 import { parseArgs } from "node:util";
-import { gradeRun, db, closeDb } from "../src/index.js";
+import { gradeRun, reviewTrades, blindAliases, db, closeDb } from "../src/index.js";
 
-const { values: args } = parseArgs({ options: { run: { type: "string" } } });
+const { values: args } = parseArgs({ options: { run: { type: "string" }, review: { type: "boolean", default: false } } });
 
 const { rows } = await db().query(
   args.run
@@ -16,7 +17,12 @@ const { rows } = await db().query(
 if (!rows.length) throw new Error(args.run ? `No run #${args.run}` : "No finished runs yet. Run pnpm backtest first.");
 const run = rows[0];
 
-const card = await gradeRun(run.id);
+let card = await gradeRun(run.id);
+if (args.review) {
+  const n = Object.keys(await reviewTrades(card, run.mode === "blind" ? { aliases: blindAliases() } : {})).length;
+  console.log(`Wrote ${n} AI reviews.`);
+  card = await gradeRun(run.id);
+}
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
 const usd = (x: number) => `${x < 0 ? "-" : "+"}$${Math.abs(x).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
@@ -28,6 +34,7 @@ for (const t of card.trades) {
   const edge = t.edgeDollars == null ? "" : usd(t.edgeDollars).padStart(8);
   console.log(`${mark} ${edge}  ${t.explanation}`);
   if (t.reason && t.reason.length < 400) console.log(`              why: ${t.reason.slice(0, 150)}`);
+  if (t.aiReview) console.log(`           review: ${t.aiReview}`);
 }
 
 const { good, bad, neutral, ungraded } = card.counts;

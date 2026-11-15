@@ -52,6 +52,7 @@ remembers the 2020 crash but not mid-2026, so the 2026 window works as a control
 ```bash
 pnpm report                  # grade every trade of the latest run
 pnpm report --run 4          # a specific run from the run log
+pnpm report --run 4 --review # also write a one-line AI review of each trade
 pnpm gap                     # Leakage Gap on the 2020 window (normal minus blind)
 pnpm gap --window control    # same on the 2026 control window
 ```
@@ -60,6 +61,8 @@ Each trade is judged on the 5 trading days after it fills: a buy is good if the 
 rose more than the fee (it beat holding cash), a sell is good if the stock fell (it
 avoided a loss). More than 1% either way counts as good or bad. Grades are saved on the
 trades; they are not part of the run's seal, so grading never breaks `runs:verify`.
+`pnpm backtest` grades every run and asks Gemini for a one-line review of each trade
+(one call per run, using what happened next); `--no-review` skips it.
 
 Each run is registered in the run log before it starts and sealed with a hash of its
 results when it finishes. `runs:verify` recomputes every hash, so an edited or deleted

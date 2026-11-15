@@ -32,6 +32,8 @@ export interface GradedTrade {
   edgeDollars: number | null;
   grade: "good" | "bad" | "neutral" | "ungraded";
   explanation: string;
+  /** One-line after-the-fact review by the model, if one was written. */
+  aiReview?: string | null;
 }
 
 export interface ReportCard {
@@ -53,7 +55,7 @@ const fmtDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en
 export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Promise<ReportCard> {
   const { rows } = await db().query(
     `SELECT id, to_char(decided_on,'YYYY-MM-DD') AS decided_on, to_char(filled_on,'YYYY-MM-DD') AS filled_on,
-            ticker, side, qty, price, fee, reason
+            ticker, side, qty, price, fee, reason, ai_review
        FROM trades WHERE run_id = $1 ORDER BY id`,
     [runId],
   );
@@ -73,7 +75,7 @@ export async function gradeRun(runId: string, horizon = GRADE_HORIZON_DAYS): Pro
     const feeRate = amount > 0 ? fee / amount : 0;
     const base = {
       id: Number(r.id), decidedOn: r.decided_on, filledOn: r.filled_on, ticker: r.ticker, side: r.side,
-      qty, price, fee, amount, reason: r.reason,
+      qty, price, fee, amount, reason: r.reason, aiReview: r.ai_review,
     };
 
     if (!later.length) {

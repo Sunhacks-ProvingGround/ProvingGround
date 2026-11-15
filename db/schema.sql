@@ -125,3 +125,5 @@ CREATE TABLE IF NOT EXISTS trades (
   explanation  text                        -- one-line review written after the run
 );
 CREATE INDEX IF NOT EXISTS trades_run_idx ON trades(run_id);
+-- One-line review written by the model after the run (it can see what happened next).
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS ai_review text;

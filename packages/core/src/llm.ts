@@ -21,3 +21,18 @@ export function gemini(modelId = geminiModelId()) {
     apiKey: process.env.GEMINI_API_KEY || "missing-key",
   };
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let lastCallAt = 0;
+
+/**
+ * Gemini's free tier allows 15 requests a minute per model. Every Gemini call
+ * in this process waits its turn here so a run never bursts into the limit.
+ * Set GEMINI_MIN_INTERVAL_MS=0 on a paid key to go full speed.
+ */
+export async function paceGeminiCall(): Promise<void> {
+  const gap = Number(process.env.GEMINI_MIN_INTERVAL_MS ?? 4200);
+  const wait = lastCallAt + gap - Date.now();
+  lastCallAt = Math.max(Date.now(), lastCallAt + gap);
+  if (wait > 0) await sleep(wait);
+}
