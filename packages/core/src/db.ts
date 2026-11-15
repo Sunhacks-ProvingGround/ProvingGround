@@ -6,15 +6,30 @@ let pool: pg.Pool | undefined;
 /** Shared connection pool for the app. This connection sees all data. */
 export function db(): pg.Pool {
   if (!pool) {
-    const url = requireEnv("DATABASE_URL");
+    const url = withoutSslParams(requireEnv("DATABASE_URL"));
     const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
     pool = new pg.Pool({
       connectionString: url,
-      ssl: local ? undefined : true, // encrypted, with certificate checks
+      // Remote databases (TigerData): always encrypted, with certificate checks.
+      ssl: local ? undefined : true,
       max: 10,
     });
   }
   return pool;
+}
+
+/**
+ * Drops SSL settings like ?sslmode=require from the URL. The code sets SSL
+ * itself (above); leaving them in makes the pg driver print a long warning
+ * and could override the certificate check.
+ */
+function withoutSslParams(url: string): string {
+  const q = url.indexOf("?");
+  if (q === -1) return url;
+  const params = new URLSearchParams(url.slice(q + 1));
+  for (const key of ["sslmode", "ssl", "uselibpqcompat"]) params.delete(key);
+  const rest = params.toString();
+  return url.slice(0, q) + (rest ? `?${rest}` : "");
 }
 
 export async function closeDb(): Promise<void> {
