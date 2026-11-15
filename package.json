@@ -11,6 +11,8 @@
     "agent:preview": "pnpm --filter @pg/core agent:preview",
     "report": "pnpm --filter @pg/core report",
     "gap": "pnpm --filter @pg/core gap",
+    "api": "pnpm --filter @pg/api start",
+    "dev:api": "pnpm --filter @pg/api dev",
     "typecheck": "pnpm -r typecheck"
   }
 }
