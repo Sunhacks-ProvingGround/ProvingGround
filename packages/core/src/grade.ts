@@ -135,7 +135,9 @@ export interface LeakageGap {
 
 /**
  * The Leakage Gap for a window: the latest finished AI run in normal mode
- * against the latest finished blind run with the same model and window.
+ * against the latest finished blind run on the same window. By default both
+ * runs saw investor posts (like for like); pass {posts: false} to compare
+ * against the prices-only blind run instead.
  */
 export async function leakageGap(start: string, end: string, opts: { posts?: boolean } = {}): Promise<LeakageGap | null> {
   const latest = async (mode: "normal" | "blind", posts?: boolean) => {
@@ -149,8 +151,8 @@ export async function leakageGap(start: string, end: string, opts: { posts?: boo
     );
     return rows[0];
   };
-  const n = await latest("normal");
-  const b = await latest("blind", opts.posts);
+  const n = await latest("normal", true);
+  const b = await latest("blind", opts.posts ?? true);
   if (!n || !b) return null;
   const nr = Number(n.summary.totalReturn);
   const br = Number(b.summary.totalReturn);
