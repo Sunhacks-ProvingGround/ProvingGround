@@ -40,6 +40,19 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Gemini's free tier allows 15 requests a minute per model. Space calls out
+ * so a run never bursts into the limit. Set GEMINI_MIN_INTERVAL_MS=0 on a
+ * paid key to go full speed.
+ */
+let lastCallAt = 0;
+async function paceCalls() {
+  const gap = Number(process.env.GEMINI_MIN_INTERVAL_MS ?? 4200);
+  const wait = lastCallAt + gap - Date.now();
+  if (wait > 0) await sleep(wait);
+  lastCallAt = Date.now();
+}
+
+/**
  * The daily briefing: everything the agent knows on one day. Normal and blind
  * mode get exactly the same information, only named and dated differently.
  */
@@ -116,6 +129,7 @@ export function llmAgent(opts: LlmAgentOptions): Strategy & { decisions: LlmDeci
       let lastError = "";
       for (let attempt = 0; attempt < 4; attempt++) {
         try {
+          await paceCalls();
           const out = await agent.generate(prompt, { structuredOutput: { schema } });
           const obj = out.object as { targets: Record<string, number>; reason: string } | undefined;
           if (!obj?.targets) throw new Error("No decision in the model's answer");

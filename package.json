@@ -9,6 +9,8 @@
     "backtest": "pnpm --filter @pg/core backtest",
     "runs:verify": "pnpm --filter @pg/core runs:verify",
     "agent:preview": "pnpm --filter @pg/core agent:preview",
+    "report": "pnpm --filter @pg/core report",
+    "gap": "pnpm --filter @pg/core gap",
     "typecheck": "pnpm -r typecheck"
   }
 }

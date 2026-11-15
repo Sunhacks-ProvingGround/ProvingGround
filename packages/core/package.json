@@ -11,6 +11,8 @@
     "backtest": "tsx scripts/backtest.ts",
     "runs:verify": "tsx scripts/verify-runs.ts",
     "agent:preview": "tsx scripts/agent-preview.ts",
+    "report": "tsx scripts/report.ts",
+    "gap": "tsx scripts/gap.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
