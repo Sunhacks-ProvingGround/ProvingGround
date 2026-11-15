@@ -13,6 +13,9 @@
     "gap": "pnpm --filter @pg/core gap",
     "api": "pnpm --filter @pg/api start",
     "dev:api": "pnpm --filter @pg/api dev",
+    "dev:web": "pnpm --filter @pg/web dev",
+    "build": "pnpm --filter @pg/web build",
+    "start": "pnpm --filter @pg/api start",
     "typecheck": "pnpm -r typecheck"
   }
 }

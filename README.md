@@ -77,6 +77,25 @@ run shows up.
 Strategies return target weights (for example `{AAPL: 0.5, NVDA: 0.3}` with the rest in
 cash), or `null` to hold. Trades smaller than 1% of the portfolio are skipped.
 
+## The app
+
+```bash
+pnpm build          # build the UI into apps/web/dist
+pnpm start          # API + UI on http://localhost:8787
+```
+
+For UI development with hot reload, run `pnpm dev:api` and `pnpm dev:web` in two
+terminals and open http://localhost:5173 (it forwards /api to port 8787).
+
+Pages: **Leakage Gap** (normal vs blind vs baselines, 2020 or 2026), **Run a test** (start
+any strategy and watch it live), **Run log** (every attempt, with an integrity check),
+a **report card** per run (charts with graded trade markers, every trade explained), and
+**What the agent sees** (the normal and blind briefings for any day).
+
+API: `GET /api/overview?window=demo|control`, `GET /api/runs`, `GET /api/runs/:id`,
+`POST /api/runs`, `GET /api/jobs/:id/stream` (live events), `GET /api/verify`,
+`GET /api/agent-preview?day=`.
+
 ## Layout
 
 ```
@@ -84,8 +103,8 @@ db/schema.sql      Tables, row-level security rule, append-only run log
 data/              prices.csv (SPY, AAPL, NVDA, 1995-2026) and posts.csv (StockTwits, 2020)
 packages/core      Database access, MarketView (the agent's only view of the market),
                    replay engine, strategies, run log, scripts
-apps/api           Backend (coming next)
-apps/web           UI (coming next)
+apps/api           Backend: Hono API, run queue, live events; serves the built UI
+apps/web           UI: Vite + React + Recharts
 ```
 
 ## How "no future data" works
