@@ -2,9 +2,11 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# esbuild (used by tsx and the UI build) needs its install script to run.
+allowBuilds:
+  esbuild: true
+
 # pnpm 12 refuses packages published in the last day. Pin this indirect
 # dependency (used by the UI build tools) to a release older than that.
-allowBuilds:
-  esbuild: false
 overrides:
   electron-to-chromium: 1.5.484
