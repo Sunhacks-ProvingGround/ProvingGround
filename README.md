@@ -28,6 +28,25 @@ pnpm backtest --no-save                              # dry run, nothing written
 pnpm runs:verify                                     # list every run and check the run log
 ```
 
+## The AI agent
+
+```bash
+pnpm backtest --strategy llm                         # Gemini, real names and dates
+pnpm backtest --strategy llm --mode blind            # same market in disguise
+pnpm backtest --strategy llm --mode blind --no-posts # disguised, prices only
+pnpm agent:preview --day 2020-03-16                  # print both briefings, no API calls
+```
+
+Each day after the close the agent gets one briefing (portfolio, last 20 closes per name,
+recent investor posts) and answers with target weights and a reason. Blind mode renames
+the stocks (STOCK_A, STOCK_B, INDEX), rescales prices to 100 on the first test day,
+replaces dates with day numbers and redacts posts (names, prices, dates, the virus,
+places, officials). The return difference between normal and blind mode is the
+**Leakage Gap**.
+
+Model: `gemini-3.1-flash-lite` by default (set `GEMINI_MODEL` in `.env` to change). It
+remembers the 2020 crash but not mid-2026, so the 2026 window works as a control.
+
 Each run is registered in the run log before it starts and sealed with a hash of its
 results when it finishes. `runs:verify` recomputes every hash, so an edited or deleted
 run shows up.

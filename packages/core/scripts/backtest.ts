@@ -3,10 +3,12 @@
 //   pnpm backtest                                   buy-and-hold on the 2020 window
 //   pnpm backtest --strategy sma_crossover --window control
 //   pnpm backtest --no-save                         dry run, nothing written
+//   pnpm backtest --strategy llm --mode blind       the AI agent (normal or blind)
+//   pnpm backtest --strategy llm --mode blind --no-posts   blind, prices only
 import { parseArgs } from "node:util";
 import {
   runBacktest, registerRun, saveRunResults, failRun, closeDb,
-  buyAndHold, smaCrossover, TRADE_TICKERS, BENCHMARK, DEMO_WINDOW, CONTROL_WINDOW,
+  buyAndHold, smaCrossover, llmAgent, TRADE_TICKERS, BENCHMARK, DEMO_WINDOW, CONTROL_WINDOW,
   type Strategy, type RunConfig,
 } from "../src/index.js";
 
@@ -17,24 +19,41 @@ const { values: args } = parseArgs({
     start: { type: "string" },
     end: { type: "string" },
     "no-save": { type: "boolean", default: false },
+    mode: { type: "string", default: "normal" },
+    "no-posts": { type: "boolean", default: false },
+    model: { type: "string" },
   },
 });
-
-const strategies: Record<string, () => Strategy> = {
-  buy_and_hold: buyAndHold,
-  sma_crossover: () => smaCrossover(10, 30),
-};
-const make = strategies[args.strategy!];
-if (!make) throw new Error(`Unknown strategy "${args.strategy}". Choose: ${Object.keys(strategies).join(", ")}`);
-const strategy = make();
 
 const window = args.window === "control" ? CONTROL_WINDOW : DEMO_WINDOW;
 const start = args.start ?? window.start;
 const end = args.end ?? window.end;
+const mode = args.mode === "blind" ? "blind" : "normal";
+
+const pctShort = (w: number) => `${Math.round(w * 100)}%`;
+const strategies: Record<string, () => Strategy> = {
+  buy_and_hold: buyAndHold,
+  sma_crossover: () => smaCrossover(10, 30),
+  llm: () =>
+    llmAgent({
+      mode,
+      start,
+      model: args.model,
+      includePosts: !args["no-posts"],
+      onDecision: (d) => {
+        const w = Object.entries(d.targets).map(([t, x]) => `${t} ${pctShort(x)}`).join(", ");
+        console.log(`  ${d.day} (${d.shownAs.padEnd(8)}) ${w.padEnd(20)} ${(d.ms / 1000).toFixed(1)}s ${d.error ? "ERROR " + d.error : d.reason.slice(0, 110)}`);
+      },
+    }),
+};
+const make = strategies[args.strategy!];
+if (!make) throw new Error(`Unknown strategy "${args.strategy}". Choose: ${Object.keys(strategies).join(", ")}`);
+if (args.strategy !== "llm" && mode === "blind") throw new Error("--mode blind only applies to --strategy llm");
+const strategy = make();
 
 const config: RunConfig = {
   agent: strategy.id,
-  mode: "normal",
+  mode,
   params: strategy.params ?? {},
   tradeable: TRADE_TICKERS,
   benchmark: BENCHMARK,
@@ -68,8 +87,10 @@ try {
     },
   });
 
+  const decisions = (strategy as { decisions?: unknown[] }).decisions;
+  if (decisions) result.summary.decisions = decisions;
   const s = result.summary;
-  console.log(`\n${strategy.id}, ${start} to ${end} (${s.days} trading days)`);
+  console.log(`\n${strategy.id}${args.strategy === "llm" ? ` (${mode}${args["no-posts"] ? ", prices only" : ""})` : ""}, ${start} to ${end} (${s.days} trading days)`);
   console.table({
     "Start value": usd(s.startEquity),
     "End value": usd(s.endEquity),

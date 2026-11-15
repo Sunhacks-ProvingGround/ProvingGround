@@ -10,11 +10,14 @@
     "db:check": "tsx scripts/check-no-future.ts",
     "backtest": "tsx scripts/backtest.ts",
     "runs:verify": "tsx scripts/verify-runs.ts",
+    "agent:preview": "tsx scripts/agent-preview.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@mastra/core": "^1.83.0",
     "dotenv": "^18.0.10",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

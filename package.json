@@ -8,6 +8,7 @@
     "db:check": "pnpm --filter @pg/core db:check",
     "backtest": "pnpm --filter @pg/core backtest",
     "runs:verify": "pnpm --filter @pg/core runs:verify",
+    "agent:preview": "pnpm --filter @pg/core agent:preview",
     "typecheck": "pnpm -r typecheck"
   }
 }

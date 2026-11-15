@@ -74,6 +74,8 @@ export interface RunSummary {
   trades: number;
   feesPaid: number;
   days: number;
+  /** AI agent only: each day's decision and reason. */
+  decisions?: unknown[];
 }
 
 export interface BacktestResult {

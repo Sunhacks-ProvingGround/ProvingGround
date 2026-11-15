@@ -8,3 +8,6 @@ export * from "./engine.js";
 export * from "./runs.js";
 export * from "./strategies/buy-and-hold.js";
 export * from "./strategies/sma-crossover.js";
+export * from "./llm.js";
+export * from "./agent-view.js";
+export * from "./strategies/llm-agent.js";
